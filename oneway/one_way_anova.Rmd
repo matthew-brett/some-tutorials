@@ -456,24 +456,41 @@ ssq_resid_overall = np.sum(resid_overall ** 2)
 ssq_resid_overall
 ```
 
-The variance way of thinking says that we should be particularly interested in our group means, when using them does a very good job of reducing the variation.  This will happen when the group values are closer to their individual group means, than they are to the overall mean.  In that case, `ssq_resid_groups` will be much lower than `ssq_resid_overall`, so we will get a fairly high value for `ssq_resid_overall - ssq_resid_groups`:
+The variance way of thinking says that we should be particularly interested in
+our group means, when using them does a very good job of reducing the
+variation.  This will happen when the group values are a lot closer to their
+individual group means, than they are to the overall mean.  In that case,
+`ssq_resid_groups` will be much lower than `ssq_resid_overall`, so we will get
+a fairly high value for `ssq_resid_overall - ssq_resid_groups`.  The result of
+this subtraction is called the *extra sum of squares* explained by the sample
+means:
 
 ```{python}
-ssq_resid_overall - ssq_resid_groups
+ess = ssq_resid_overall - ssq_resid_groups
+ess
 ```
 
-Oh - wait - that's *exactly* the same as the SNSQGMD metric we were already using!
+Remember, `ssq_resid_overall` is the (sum of squared) variation remaining after accounting for the overall mean, and `ssq_resid_groups` is the (sum of squared) variation remaining after accounting for the sample means, so `ess` is the *extra* variation accounted for by using the sample means.
+
+But — wait — the `ess` value is *exactly* the same as the SNSQGMD metric we
+were already using!
 
 ```{python}
 observed_sn_sq_gmd
 ```
 
-This striking fact is to do with the algebra of adding squared deviations from means.  The equivalence gives us the two different ways of thinking of the SNSQGMD metric.  It can be either:
+This striking fact is true for any possible values and groups, and arises from
+the algebra of adding squared deviations from means.  The equivalence gives us
+two different ways of thinking of the same SNSQGMD metric value.  The SNSQGMD
+value is both:
 
-* A measure of how far the sample means are from the overall mean, or
-* A measure of how much "unexplained" variation is left when *not* using
-  the sample means.
+* A measure of how far the sample means are from the overall mean, AND
+* A measure of how much variation the sample means explain, over and above the
+  overall mean.
 
-In this second "unexplained variance" interpretation, we think of the F test
-calculation as being a ratio of the unexplained variance to the variance
-remaining when we do use the sample means.  If the sample means explain a lot of variation, then the top half of the F statistic will be large, and the bottom half will be small, giving a large F value.
+In this second "explained variance" interpretation, we think of the F test
+calculation as being a scaled ratio of the extra variance explained by the
+sample means to the variance still remaining when we use the sample means.  If
+the sample means explain a lot of variation, then the top half of the F
+statistic will be large, and the bottom half will be small, giving a large F
+value.
