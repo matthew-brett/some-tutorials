@@ -16,8 +16,8 @@ jupyter:
 
 # One-way ANOVA
 
-Imagine you have three groups, and you want to do a one-level ANOVA to test
-for overall differences across the groups.
+Imagine you have three groups, and you want to do a one-level ANOVA to test for
+overall differences across the groups.
 
 The general technique for a permutation test is:
 
@@ -35,7 +35,12 @@ For a three sample version of the test — we need a metric that will be big
 where there are big differences between the three groups, and small when there
 are small differences.
 
-One good metric could be to:
+Let us reflect on what what we want from the metric.  It should be a single
+number to summarize all the values from the groups. It should be be large for
+big differences between the means for the various groups.  It should be larger
+when more observations are in the groups with large difference in means.
+
+Consider the following metric.  We will soon see this is the metric that the F-test uses.
 
 * Get the sample means for each of the three groups A, B, C, to give `mean_a`,
   `mean_b`, `mean_c`
@@ -43,27 +48,38 @@ One good metric could be to:
   (`mean_overall`)
 * Subtract `mean_overall` from each of `mean_a`, `mean_b`, `mean_c` to give
   `mean_a_diff`, `mean_b_diff`, `mean_c_diff`.
+* We are interested in positive as well as negative differences, so we do not
+  want to add these mean differences, otherwise the positive and negative means
+  differences will cancel out. So we next square the differences to give:
+  `sq_mean_a_diff`, `sq_mean_b_diff`, `sq_mean_c_diff`.
+* We want larger groups to have greater weight than small groups.  Call the
+  number in groups A, B, and C `n_a`, `n_b`, `n_c`. To weight the squared mean
+  differences we multiply each square mean difference by the number in each
+  group: `sq_mean_a_diff * n_a`, `sq_mean_b_diff * n_b`, `sq_mean_c_diff *
+  n_b`, to give `nsq_mean_a_diff`, `nsq_mean_b_diff`, `n_sq_mean_c_diff`.
+*   Finally, we add up the group `nsq` scores to give our metric:
 
-As usual, we need one number as our metric, and as usual, we're interested in
-positive as well as negative differences, so we want to get rid of the signs
-on these somehow, before adding them up.  One way is to square them, and so
-the metric is:
+    ```
+    our_metric = nsq_mean_a_diff + nsq_mean_b_diff + nsq_mean_c_diff
+    ```
 
-    our_metric = mean_a_diff ** 2 + mean_b_diff ** 2 + mean_c_diff ** 2
+We will call this the SNSQGMD metric (Sum of N times SQuared Group Mean
+Difference).
 
-This will be big when the individual groups have different means from each
-other and small when the means for the groups are pretty similar to each
-other, and therefore, to the overall mean.
+SNSQGMD will be large and positive when the individual groups have different
+means from each other and small when the means for the groups are pretty
+similar to each other, and therefore, to the overall mean.  It will be larger
+when larger groups have means with bigger deviations from the overall mean.
 
-To follow the recipe above we calculate this metric for the actual groups A,
-B, C.   Permute the group labels to give random groups A, B, C, and
-recalculate the metric.   See whether the metric in the real data is unusual
-in the distribution of the same metric for the permuted groups.
+To follow the recipe above, we calculate SNSQGMD for the actual groups A, B, C.
+Permute the group labels to give random groups A, B, C, and recalculate the
+metric.   See whether SNSQGMD in the real data is unusual in the distribution of
+the same metric for the permuted groups.
 
 This is the permutation equivalent of the one-way ANOVA.   The one-way ANOVA
-just uses some assumptions from the normal distribution to estimate the random
-distribution, instead of using permutation to calculate the random
-distribution.
+just uses some assumptions from the normal distribution to estimate the spread
+in the random distribution of SNSQGMD, instead of using permutation to calculate
+the random distribution.
 
 
 ## An example
@@ -75,6 +91,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 ```
+
+## The example dataset, ready for analysis
 
 The data corresponds to [this
 paper](https://pubmed.ncbi.nlm.nih.gov/19375278/).
@@ -90,7 +108,8 @@ From the abstract:
 It is not clear what data we have, but they may be change scores before and
 after treatment, for the pre-operative group.
 
-Notice we have three treatment groups, the "Bath" group, the "Bath+Exercise" group and the "Exercise" group.
+Notice we have three treatment groups, the "Bath" group, the "Bath+Exercise"
+group and the "Exercise" group.
 
 ```{python}
 # Read the raw dataset
@@ -98,13 +117,15 @@ baths = pd.read_csv('contrast-baths.txt', sep='\t')
 baths.head()
 ```
 
-Both columns are "objects", meaning strings.
+We need to do some processing go analyze the data.  Although the second column has the numerical values we are interested in, Pandas has read both columns as Python strings ("objects"):
 
 ```{python}
 baths.dtypes
 ```
 
-In fact, missing data here is a single space character.  Fix that, by replacing single spaces with empty strings, then converting all the "Hand Vol Chg" values to numbers.
+Investigating, the missing data here are given by a single space character.
+Fix that, by replacing single spaces with empty strings. Then we convert all
+the "Hand Vol Chg" values to numbers.
 
 ```{python}
 baths['Hand Vol Chg'] = baths['Hand Vol Chg'].replace(' ', '')
@@ -121,10 +142,12 @@ clean_baths.head()
 
 We are now ready to do the analysis.
 
+## Means by group
+
 Here are the data, plotted by group.
 
 ```{python}
-clean_baths.plot.scatter('Treatment', 'Hand Vol Chg')
+clean_baths.plot.scatter('Treatment', 'Hand Vol Chg');
 ```
 
 These are the means for each of the three groups.
@@ -134,14 +157,21 @@ group_means = clean_baths.groupby('Treatment').mean()
 group_means
 ```
 
-This is the overall mean, ignoring the groups:
+These are the number of observations per group:
+
+```{python}
+group_ns = clean_baths.groupby('Treatment').count()
+group_ns
+```
+
+Here is the overall mean, ignoring the group membership:
 
 ```{python}
 overall_mean = np.mean(clean_baths['Hand Vol Chg'])
 overall_mean
 ```
 
-Here we plot the data, the group means, and the overall mean on the same plot.
+The next plot shows the data, the group means, and the overall mean:
 
 ```{python}
 clean_baths.plot.scatter('Treatment', 'Hand Vol Chg',
@@ -153,39 +183,67 @@ plt.plot(group_means.index,
          [overall_mean, overall_mean, overall_mean],
          ':', color='green',
          label='Overall mean')
+# A dashed line between each group mean and the overall mean.
+for group in group_means.index:
+    xs = [group, group]
+    ys = [float(group_means.loc[group]), overall_mean]
+    plt.plot(xs, ys, ':', color='red')
 plt.legend();
 ```
 
-We calculate the difference between the group means and the overall mean.
+Notice the red dashed lines between the group means and the overall mean. We
+designed our SNSQGMD metric to be large when the sum of the squared lengths of
+these lines are large.  The N in  SNSQGMD reminds us we multiply each squared
+length by the number in the group, to give more weight to large groups.
+
+To calculate SNSQGMD we get the Group Mean Difference.
 
 ```{python}
-mean_diffs = group_means - overall_mean
-mean_diffs
+gmd = group_means - overall_mean
+gmd
 ```
 
-We calculate the sum of squares measure of the difference of the group means from the overall mean.
+We square these differences:
 
 ```{python}
-mean_diff_ssq = np.sum(mean_diffs ** 2)
-mean_diff_ssq
+sq_gmd = gmd ** 2
+sq_gmd
 ```
 
-This is our metric.  To make this a bit clearer, we put the calculation of our metric into its own function so we can re-use it on different data frames.
+We want to give more weight to groups with more members, so we multiply each squared difference by the number in the group:
 
 ```{python}
-def ssq_mean_diffs(df, group_col, val_col):
+n_sq_gmd = sq_gmd * group_ns
+n_sq_gmd
+```
+
+Finally, we add up these weighted squares to get the final metric:
+
+```{python}
+observed_sn_sq_gmd = np.sum(n_sq_gmd)
+observed_sn_sq_gmd
+```
+
+This is our metric.  To make this a bit clearer, we put the calculation of our
+metric into its own function so we can re-use it on different data frames.
+
+```{python}
+def get_sn_sq_gmd(df, group_col, val_col):
     overall_mean = np.mean(df[val_col])
-    group_means = df.groupby(group_col)[val_col].mean()
-    return np.sum((group_means - overall_mean) ** 2)
+    grouped = df.groupby(group_col)[val_col]
+    sq_gmd = (grouped.mean() - overall_mean) ** 2
+    return np.sum(sq_gmd * grouped.count())
 ```
 
 Check that we get the same answer from the function as we did with the step-by-step calculation:
 
 ```{python}
-ssq_mean_diffs(clean_baths, 'Treatment', 'Hand Vol Chg')
+get_sn_sq_gmd(clean_baths, 'Treatment', 'Hand Vol Chg')
 ```
 
-Next we consider a single trial in our ideal, null, fake world.  We do this by making a copy of the data frame, and then permuting the Treatment labels, so the association between the Treatment and the change values is random.
+Next we consider a single trial in our ideal, null, fake world.  We do this by
+making a copy of the data frame, and then permuting the Treatment labels, so
+the association between the Treatment and the change values is random.
 
 ```{python}
 fake_data = clean_baths.copy()
@@ -197,48 +255,56 @@ fake_data.head()
 Next we calculate our metric step by step.
 
 ```{python}
-fake_means = fake_data.groupby('Treatment').mean()
+fake_grouped = fake_data.groupby('Treatment')['Hand Vol Chg']
 # Notice that the overall_mean cannot change because we did not
 # change these values.
-fake_ssq = np.sum((fake_means - overall_mean) ** 2)
-fake_ssq
+fake_sq_gmd = (fake_grouped.mean() - overall_mean) ** 2
+fake_sn_sq_gmd = np.sum(fake_sq_gmd * fake_grouped.count())
+fake_sn_sq_gmd
 ```
 
 We can also use our function to do that calculation, to get the same answer:
 
 ```{python}
-ssq_mean_diffs(fake_data, 'Treatment', 'Hand Vol Chg')
+get_sn_sq_gmd(fake_data, 'Treatment', 'Hand Vol Chg')
 ```
 
-Now we are ready to do our simulation.  We do 10000 trials, making a new random association, and recalculating our sum of squares metric.
+Now we are ready to do our simulation.  We do 10000 trials, making a new random
+association, and recalculating our sum of squares metric.
 
 ```{python}
 n_iters = 10000
-fake_ssqs = np.zeros(n_iters)
+fake_sn_sq_gmds = np.zeros(n_iters)
 for i in np.arange(n_iters):
+    # Make sample from null world.
     fake_data['Treatment'] = np.random.permutation(fake_data['Treatment'])
-    fake_ssqs[i] = ssq_mean_diffs(fake_data, 'Treatment', 'Hand Vol Chg')
+    # Calculate corresponding metric.
+    fake_sn_sq_gmds[i] = get_sn_sq_gmd(fake_data, 'Treatment', 'Hand Vol Chg')
 ```
 
 Of course, because these are sums of squares, they must all be positive.
 
 ```{python}
-plt.hist(fake_ssqs, bins=100);
+plt.hist(fake_sn_sq_gmds, bins=100);
 ```
 
-How does our observed sum of squares metric compare to the distribution of fake sum of square metrics?
+How does our observed sum of squares metric compare to the distribution of fake
+sum of square metrics?
 
 ```{python}
-p = np.count_nonzero(fake_ssqs >= float(mean_diff_ssq)) / n_iters
+p = np.count_nonzero(fake_sn_sq_gmds >= float(observed_sn_sq_gmd)) / n_iters
 p
 ```
 
-The p value tells us that this observed metric is very unlikely to have come about in a random world.
+The p value tells us that this observed metric is very unlikely to have come
+about in a random world.
+
 
 ## Comparing to standard one-way ANOVA F tests
 
-Notice that we get a similar p value from the standard one-way ANOVA
-F-test.  Here is the Statsmodels implementation:
+Here we do the standard F-test calculations to show that we get a similar p
+value to the permutation version above.  Here is the Statsmodels
+implementation of the one-way F test:
 
 ```{python}
 import statsmodels.api as sm
@@ -250,7 +316,7 @@ mod = smf.ols('Q("Hand Vol Chg") ~ Treatment', data=clean_baths).fit()
 sm.stats.anova_lm(mod, typ=1)
 ```
 
-Here is doing the same calculation in Scipy:
+Here is the same calculation in Scipy:
 
 ```{python}
 from scipy.stats import f_oneway
@@ -265,8 +331,148 @@ both = change[treatment == 'Bath+Exercise']
 exercise = change[treatment == 'Exercise']
 ```
 
-Do the F-test in Scipy:
+Do the F-test:
 
 ```{python}
-f_oneway(bath, both, exercise)
+f_result = f_oneway(bath, both, exercise)
+f_result
 ```
+
+
+## The F statistic and the SNSQGMD metric
+
+In this section, we go into more detail about the calculation of the F value that you see above, in the F tests.  Here is the calculated F statistic from Scipy.  You have seen we got the same value from Statsmodels.
+
+```{python}
+F_stat = f_result.statistic
+F_stat
+```
+
+This section goes through the calculation of the F statistic from the SNSQGMD metric.  This is the value we got for that metric:
+
+```{python}
+observed_sn_sq_gmd
+```
+
+You can get the F statistic above by dividing the SNSQGMD metric by a scaled estimate of the variation still present in the data.
+
+The variation still present in the data are the remaining distances between the
+data (in the plot above) and their corresponding group means.  Call these
+remaining distances the "residuals".
+
+Here are the group means:
+
+```{python}
+group_means
+```
+
+We are going to put the group means into their own column in the original data frame, in order to subtract them from the individual values.  First we make a new copy of the group means, but renaming the value column for later.
+
+```{python}
+gms_renamed = group_means.rename(columns={"Hand Vol Chg": "vol_chg_mean"})
+gms_renamed
+```
+
+Next we merge this group means data frame into the original table, to give every row its corresponding group mean.
+
+```{python}
+baths_and_means = clean_baths.merge(gms_renamed, on='Treatment')
+baths_and_means.head()
+```
+
+Now we can calculate the residuals by subtracting the corresponding group mean from each hand volume change value.
+
+```{python}
+baths_and_means['resid'] = (baths_and_means['Hand Vol Chg'] -
+                            baths_and_means['vol_chg_mean'])
+baths_and_means.head()
+```
+
+Next we give a number (metric) to the residuals by squaring (to remove the signs) and adding:
+
+```{python}
+ssq_resid_groups = np.sum((baths_and_means['resid']) ** 2)
+ssq_resid_groups
+```
+
+The F-statistic results from dividing this measure of remaining variation
+into the SNSQGMD metric, with some scaling.  The scaling comes from the number of observations, and the number of groups.
+
+```{python}
+n_obs = len(baths_and_means)
+n_groups = len(group_means)
+```
+
+Here is the full calculation of the F-statistic. Notice that it is exactly the same as we got from Scipy and Statsmodels.
+
+```{python}
+# Calculate of the F value by scaling and dividing by residual variation
+# metric.
+df_groups = n_groups - 1  # Degrees of freedom for groups.
+df_error = n_obs - n_groups  # Degrees of freedom for residuals.
+# The F statistic
+(observed_sn_sq_gmd / df_groups) / (ssq_resid_groups / df_error)
+```
+
+Scaling and dividing by the residual variation gives a value that we can reason
+about with some standard mathematics, as long as we are prepared to assume that
+the distribution of the values is normal.  Specifically, with those assumptions, we can get a p value by comparing the observed F value to a standard F distribution with the same "degrees of freedom".  These are the `df_groups` and `df_error` values above.
+
+As you have seen, the permutation estimate gives a very similar answer.  We would argue that it is also a lot easier to explain.
+
+
+## F tests in terms of explained variation
+
+You will often see explanations of the F-value in terms of the amount of
+variation explained by the overall mean, compared to the amount of variation
+explained with the individual group means.  In fact, this "variance" way of
+thinking is what gave the test the name ANOVA (Analysis of Variance).
+
+The explained variation path (literally) adds up to the same thing as the
+SNSQGMD metric version of the F statistic above.  This section goes through the
+explained variation way of thinking of the F statistic, and shows that it
+gives the same value for the SNSQGMD metric.
+
+The "variance" way of thinking about the F looks at the sum of squared
+"residual" variation in two situations.  First we get the residual variation
+when we use subtract the group means.  We already have this from the F test calculation above.  As a reminder, we repeat the calculation here:
+
+```{python}
+ssq_resid_groups = np.sum((baths_and_means['resid']) ** 2)
+ssq_resid_groups
+```
+
+This is the sum of squared remaining variation when using the group means.
+
+We compare this to the squared remaining variation when just using the overall mean.  Here is that calculation.
+
+```{python}
+# Sum of squared residuals using overall mean
+# Subtract the overall mean from the original values to get residuals.
+resid_overall = clean_baths['Hand Vol Chg'] - overall_mean
+# Square and sum the residuals to get the squared variation from overall mean.
+ssq_resid_overall = np.sum(resid_overall ** 2)
+ssq_resid_overall
+```
+
+The variance way of thinking says that we should be particularly interested in our group means, when using them does a very good job of reducing the variation.  This will happen when the group values are closer to their individual group means, than they are to the overall mean.  In that case, `ssq_resid_groups` will be much lower than `ssq_resid_overall`, so we will get a fairly high value for `ssq_resid_overall - ssq_resid_groups`:
+
+```{python}
+ssq_resid_overall - ssq_resid_groups
+```
+
+Oh - wait - that's *exactly* the same as the SNSQGMD metric we were already using!
+
+```{python}
+observed_sn_sq_gmd
+```
+
+This striking fact is to do with the algebra of adding squared deviations from means.  The equivalence gives us the two different ways of thinking of the SNSQGMD metric.  It can be either:
+
+* A measure of how far the sample means are from the overall mean, OR
+* A measure of how much "unexplained" variation is left when *not* using
+  the sample means.
+
+In this second "unexplained variance" interpretation, we think of the F test
+calculation as being a ratio of the unexplained variance to the variance
+remaining when we do use the sample means.  If the sample means explain a lot of variation, then the top half of the F statistic will be large, and the bottom half will be small, giving a large F value.
