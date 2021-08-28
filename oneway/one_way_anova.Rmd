@@ -435,7 +435,8 @@ gives the same value for the SNSQGMD metric.
 
 The "variance" way of thinking about the F looks at the sum of squared
 "residual" variation in two situations.  First we get the residual variation
-when we use subtract the group means.  We already have this from the F test calculation above.  As a reminder, we repeat the calculation here:
+when we subtract the group means.  We already have this from the F test
+calculation above.  As a reminder, we repeat the calculation here:
 
 ```{python}
 ssq_resid_groups = np.sum((baths_and_means['resid']) ** 2)
@@ -469,7 +470,7 @@ observed_sn_sq_gmd
 
 This striking fact is to do with the algebra of adding squared deviations from means.  The equivalence gives us the two different ways of thinking of the SNSQGMD metric.  It can be either:
 
-* A measure of how far the sample means are from the overall mean, OR
+* A measure of how far the sample means are from the overall mean, or
 * A measure of how much "unexplained" variation is left when *not* using
   the sample means.
 
