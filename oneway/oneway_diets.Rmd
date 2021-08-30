@@ -213,7 +213,7 @@ observed_sn_sq_gmd = np.sum(n_sq_gmd)
 observed_sn_sq_gmd
 ```
 
-This is our metric.  To make this a bit clearer, we put the calculation of our
+To make the process a bit clearer, we put the calculation of our
 metric into its own function so we can re-use it on different data frames.
 
 ```{python}
@@ -403,9 +403,18 @@ assumptions, we can get a p value by comparing the observed F value to a
 standard F distribution with the same "degrees of freedom".  These are the
 `df_groups` and `df_error` values above.
 
+```{python}
+# Get standard F distribution object from Scipy.
+from scipy.stats import f as f_dist
+
+# Look up p value for a particular F statistic and degrees of freedom.
+# Notice the p value is the same as the p value from Scipy f_oneway
+# and from Statsmodels.
+f_dist(df_groups, df_error).sf(F_stat)
+```
+
 As you have seen, the permutation estimate gives a very similar answer.  We
 would argue that it is also a lot easier to explain.
-
 
 ## F tests in terms of explained variation
 
