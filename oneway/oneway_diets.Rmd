@@ -7,7 +7,7 @@ jupyter:
       extension: .Rmd
       format_name: rmarkdown
       format_version: '1.2'
-      jupytext_version: 1.8.2
+      jupytext_version: 1.10.0
   kernelspec:
     display_name: Python 3
     language: python
@@ -107,7 +107,7 @@ kilograms weight lost by that person after 10 weeks of following the diet.
 We are interested to know if the diets `A`, `B` and `C` differ overall in the
 amount of weight loss for people on that diet.
 
-We will call sometimes call the allocated diet the *group* to which the person
+We call the allocated diet the *group* to which the person
 (row) belongs.
 
 
@@ -316,15 +316,15 @@ from scipy.stats import f_oneway
 # Get the values from the individual groups.
 treatment = diets['diet']
 change = diets['weight_lost']
-diet_a = change[treatment == 'A']
-diet_b = change[treatment == 'B']
-diet_c = change[treatment == 'C']
+diet_a_values = np.array(change[treatment == 'A'])
+diet_b_values = np.array(change[treatment == 'B'])
+diet_c_values = np.array(change[treatment == 'C'])
 ```
 
 Do the F-test:
 
 ```{python}
-f_result = f_oneway(diet_a, diet_b, diet_c)
+f_result = f_oneway(diet_a_values, diet_b_values, diet_c_values)
 f_result
 ```
 
@@ -354,43 +354,24 @@ The variation still present in the data are the remaining distances between the
 data (in the plot above) and their corresponding group means.  Call these
 remaining distances the "residuals".
 
-Here are the group means:
+
+Subtract each group mean from their respective group values:
 
 ```{python}
-group_means
+# Calculate the residuals from the group means.
+diet_a_resid = diet_a_values - np.mean(diet_a_values)
+diet_b_resid = diet_b_values - np.mean(diet_b_values)
+diet_c_resid = diet_c_values - np.mean(diet_c_values)
 ```
 
-We are going to put the group means into their own column in the original data
-frame, in order to subtract them from the individual values.  First we make a
-new copy of the group means, but renaming the value column for later.
+Finally, we sum up the squares of these residuals:
 
 ```{python}
-gms_renamed = group_means.rename(columns={"weight_lost": "vol_chg_mean"})
-gms_renamed
-```
-
-Next we merge the group means data frame into the original table, to give every
-row its corresponding group mean.
-
-```{python}
-diets_and_means = diets.merge(gms_renamed, on='diet')
-diets_and_means.head()
-```
-
-We can calculate the residuals by subtracting the corresponding group mean
-from each hand volume change value.
-
-```{python}
-diets_and_means['resid'] = (diets_and_means['weight_lost'] -
-                            diets_and_means['vol_chg_mean'])
-diets_and_means.head()
-```
-
-We give a number (metric) to the residuals by squaring (to remove the signs)
-and adding:
-
-```{python}
-ssq_resid_groups = np.sum((diets_and_means['resid']) ** 2)
+# We concatenate the three sets of residuals into one long array.
+all_group_resid = np.concatenate(
+    [diet_a_resid, diet_b_resid, diet_c_resid])
+# Sum of squared residuals from group means.
+ssq_resid_groups = np.sum(all_group_resid ** 2)
 ssq_resid_groups
 ```
 
@@ -399,7 +380,7 @@ the SNSQGMD metric, with some scaling.  The scaling comes from the number of
 observations, and the number of groups.
 
 ```{python}
-n_obs = len(diets_and_means)
+n_obs = len(diets)
 n_groups = len(group_means)
 ```
 
@@ -441,10 +422,11 @@ that it gives the same value for the SNSQGMD metric.
 The "variance" way of thinking about the F looks at the sum of squared
 "residual" variation in two situations.  First we get the residual variation
 when we subtract the group means.  We already have this from the F test
-calculation above.  As a reminder, we repeat the calculation here:
+calculation above.  Here we repeat the calculation as a reminder of what the
+value means:
 
 ```{python}
-ssq_resid_groups = np.sum((diets_and_means['resid']) ** 2)
+ssq_resid_groups = np.sum(all_group_resid ** 2)
 ssq_resid_groups
 ```
 
