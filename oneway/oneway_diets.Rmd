@@ -313,6 +313,9 @@ mod = smf.ols('weight_lost ~ diet', data=diets).fit()
 sm.stats.anova_lm(mod, typ=1)
 ```
 
+Notice that the SNSQGMD metric value appears in the `diet` row, `sum_sq` column.
+
+
 Here is the same calculation in Scipy:
 
 ```{python}
@@ -335,6 +338,8 @@ f_result = f_oneway(diet_a_values, diet_b_values, diet_c_values)
 f_result
 ```
 
+
+Notice Scipy gives the same F statistic value and p value as Statsmodels.
 
 ## The F statistic and the SNSQGMD metric
 
@@ -381,6 +386,9 @@ all_group_resid = np.concatenate(
 ssq_resid_groups = np.sum(all_group_resid ** 2)
 ssq_resid_groups
 ```
+
+You will see this value in the `Residual` row, `sum_sq` column of the Statsmodels output above.
+
 
 The F-statistic results from dividing this measure of remaining variation into
 the SNSQGMD metric, with some scaling.  The scaling comes from the number of
