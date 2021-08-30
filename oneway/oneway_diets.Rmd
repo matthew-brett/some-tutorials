@@ -56,7 +56,7 @@ Consider the following metric.  We will soon see this is the metric that the F-t
   number in groups A, B, and C `n_a`, `n_b`, `n_c`. To weight the squared mean
   differences we multiply each square mean difference by the number in each
   group: `sq_mean_a_diff * n_a`, `sq_mean_b_diff * n_b`, `sq_mean_c_diff *
-  n_b`, to give `nsq_mean_a_diff`, `nsq_mean_b_diff`, `n_sq_mean_c_diff`.
+  n_c`, to give `nsq_mean_a_diff`, `nsq_mean_b_diff`, `nsq_mean_c_diff`.
 *   Finally, we add up the group `nsq` scores to give our metric:
 
     ```
@@ -160,7 +160,9 @@ for group in group_means.index:
 plt.legend();
 ```
 
-Notice the red dashed lines between the group means and the overall mean.  To make these easier to see, here is the same plot, without the individual data points:
+Notice the red dashed lines between the group means and the
+overall mean.  To make these easier to see, here is the same
+plot, without the individual data points:
 
 ```{python}
 plt.scatter(group_means.index, np.array(group_means), color='red',
@@ -196,7 +198,8 @@ sq_gmd = gmd ** 2
 sq_gmd
 ```
 
-We want to give more weight to groups with more members, so we multiply each squared difference by the number in the group:
+We want to give more weight to groups with more members, so we multiply each
+squared difference by the number in the group:
 
 ```{python}
 n_sq_gmd = sq_gmd * group_ns
@@ -221,7 +224,8 @@ def get_sn_sq_gmd(df, group_col, val_col):
     return np.sum(sq_gmd * grouped.count())
 ```
 
-Check that we get the same answer from the function as we did with the step-by-step calculation:
+Check that we get the same answer from the function as we did with the
+step-by-step calculation:
 
 ```{python}
 get_sn_sq_gmd(diets, 'diet', 'weight_lost')
@@ -238,7 +242,7 @@ fake_data['diet'] = np.random.permutation(fake_data['diet'])
 fake_data.head()
 ```
 
-Next we calculate our metric step by step.
+We calculate our metric on these new data, step by step.
 
 ```{python}
 fake_grouped = fake_data.groupby('diet')['weight_lost']
@@ -249,14 +253,15 @@ fake_sn_sq_gmd = np.sum(fake_sq_gmd * fake_grouped.count())
 fake_sn_sq_gmd
 ```
 
-We can also use our function to do that calculation, to get the same answer:
+We can also use the function above to do that calculation, and get the same
+answer:
 
 ```{python}
 get_sn_sq_gmd(fake_data, 'diet', 'weight_lost')
 ```
 
-Now we are ready to do our simulation.  We do 10000 trials, making a new random
-association, and recalculating our sum of squares metric.
+Now we are ready to do our simulation.  We do 10000 trials. In each trial, we
+make a new random association, and recalculate the sum of squares metric.
 
 ```{python}
 n_iters = 10000
@@ -288,8 +293,8 @@ about in a random world.
 
 ## Comparing to standard one-way ANOVA F tests
 
-Here we do the standard F-test calculations to show that we get a similar p
-value to the permutation version above.  Here is the Statsmodels
+In this section, we do the standard F-test calculations to show that we get a
+similar p value to the permutation version above.  This is the Statsmodels
 implementation of the one-way F test:
 
 ```{python}
@@ -326,20 +331,24 @@ f_result
 
 ## The F statistic and the SNSQGMD metric
 
-In this section, we go into more detail about the calculation of the F value that you see above, in the F tests.  Here is the calculated F statistic from Scipy.  You have seen we got the same value from Statsmodels.
+In this section, we go into more detail about the calculation of the F value
+that you see above.  Here is the F statistic we got from Scipy (and
+Statsmodels):
 
 ```{python}
 F_stat = f_result.statistic
 F_stat
 ```
 
-This section goes through the calculation of the F statistic from the SNSQGMD metric.  This is the value we got for that metric:
+This section goes through the calculation of the F statistic from the SNSQGMD
+metric.  This is the SNSQGMD value we calculated:
 
 ```{python}
 observed_sn_sq_gmd
 ```
 
-You can get the F statistic above by dividing the SNSQGMD metric by a scaled estimate of the variation still present in the data.
+You can get the F statistic above by dividing the SNSQGMD metric by a scaled
+estimate of the variation still present in the data.
 
 The variation still present in the data are the remaining distances between the
 data (in the plot above) and their corresponding group means.  Call these
@@ -351,21 +360,25 @@ Here are the group means:
 group_means
 ```
 
-We are going to put the group means into their own column in the original data frame, in order to subtract them from the individual values.  First we make a new copy of the group means, but renaming the value column for later.
+We are going to put the group means into their own column in the original data
+frame, in order to subtract them from the individual values.  First we make a
+new copy of the group means, but renaming the value column for later.
 
 ```{python}
 gms_renamed = group_means.rename(columns={"weight_lost": "vol_chg_mean"})
 gms_renamed
 ```
 
-Next we merge this group means data frame into the original table, to give every row its corresponding group mean.
+Next we merge the group means data frame into the original table, to give every
+row its corresponding group mean.
 
 ```{python}
 diets_and_means = diets.merge(gms_renamed, on='diet')
 diets_and_means.head()
 ```
 
-Now we can calculate the residuals by subtracting the corresponding group mean from each hand volume change value.
+We can calculate the residuals by subtracting the corresponding group mean
+from each hand volume change value.
 
 ```{python}
 diets_and_means['resid'] = (diets_and_means['weight_lost'] -
@@ -373,22 +386,25 @@ diets_and_means['resid'] = (diets_and_means['weight_lost'] -
 diets_and_means.head()
 ```
 
-Next we give a number (metric) to the residuals by squaring (to remove the signs) and adding:
+We give a number (metric) to the residuals by squaring (to remove the signs)
+and adding:
 
 ```{python}
 ssq_resid_groups = np.sum((diets_and_means['resid']) ** 2)
 ssq_resid_groups
 ```
 
-The F-statistic results from dividing this measure of remaining variation
-into the SNSQGMD metric, with some scaling.  The scaling comes from the number of observations, and the number of groups.
+The F-statistic results from dividing this measure of remaining variation into
+the SNSQGMD metric, with some scaling.  The scaling comes from the number of
+observations, and the number of groups.
 
 ```{python}
 n_obs = len(diets_and_means)
 n_groups = len(group_means)
 ```
 
-Here is the full calculation of the F-statistic. Notice that it is exactly the same as we got from Scipy and Statsmodels.
+Here is the full calculation of the F-statistic. Notice that it is exactly the
+same as we got from Scipy and Statsmodels.
 
 ```{python}
 # Calculate of the F value by scaling and dividing by residual variation
@@ -401,9 +417,13 @@ df_error = n_obs - n_groups  # Degrees of freedom for residuals.
 
 Scaling and dividing by the residual variation gives a value that we can reason
 about with some standard mathematics, as long as we are prepared to assume that
-the distribution of the values is normal.  Specifically, with those assumptions, we can get a p value by comparing the observed F value to a standard F distribution with the same "degrees of freedom".  These are the `df_groups` and `df_error` values above.
+the values come from a normal distribution.  Specifically, with those
+assumptions, we can get a p value by comparing the observed F value to a
+standard F distribution with the same "degrees of freedom".  These are the
+`df_groups` and `df_error` values above.
 
-As you have seen, the permutation estimate gives a very similar answer.  We would argue that it is also a lot easier to explain.
+As you have seen, the permutation estimate gives a very similar answer.  We
+would argue that it is also a lot easier to explain.
 
 
 ## F tests in terms of explained variation
@@ -414,9 +434,9 @@ explained with the individual group means.  In fact, this "variance" way of
 thinking is what gave the test the name ANOVA (Analysis of Variance).
 
 The explained variation path (literally) adds up to the same thing as the
-SNSQGMD metric version of the F statistic above.  This section goes through the
-explained variation way of thinking of the F statistic, and shows that it
-gives the same value for the SNSQGMD metric.
+SNSQGMD metric version of the F statistic above.  The current section goes
+through the explained variation way of thinking of the F statistic, and shows
+that it gives the same value for the SNSQGMD metric.
 
 The "variance" way of thinking about the F looks at the sum of squared
 "residual" variation in two situations.  First we get the residual variation
@@ -430,7 +450,8 @@ ssq_resid_groups
 
 This is the sum of squared remaining variation when using the group means.
 
-We compare this to the squared remaining variation when just using the overall mean.  Here is that calculation.
+We compare this to the squared remaining variation when just using the overall
+mean.  Here is that calculation.
 
 ```{python}
 # Sum of squared residuals using overall mean
@@ -455,7 +476,10 @@ ess = ssq_resid_overall - ssq_resid_groups
 ess
 ```
 
-Remember, `ssq_resid_overall` is the (sum of squared) variation remaining after accounting for the overall mean, and `ssq_resid_groups` is the (sum of squared) variation remaining after accounting for the sample means, so `ess` is the *extra* variation accounted for by using the sample means.
+Remember, `ssq_resid_overall` is the (sum of squared) variation remaining after
+accounting for the overall mean, and `ssq_resid_groups` is the (sum of squared)
+variation remaining after accounting for the sample means, so `ess` is the
+*extra* variation accounted for by using the sample means.
 
 But — wait — the `ess` value is *exactly* the same as the SNSQGMD metric we
 were already using!
