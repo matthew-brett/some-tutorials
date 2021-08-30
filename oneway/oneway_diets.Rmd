@@ -7,7 +7,7 @@ jupyter:
       extension: .Rmd
       format_name: rmarkdown
       format_version: '1.2'
-      jupytext_version: 1.10.0
+      jupytext_version: 1.8.2
   kernelspec:
     display_name: Python 3
     language: python
@@ -96,7 +96,14 @@ See: [the dataset page](https://github.com/odsti/datasets/tree/master/sheffield_
 
 ```{python}
 # Read the raw dataset
-diets = pd.read_csv('sheffield_diet.csv')
+diet_data = pd.read_csv('sheffield_diet.csv')
+diet_data.head()
+```
+
+Here we are only interested in the last two columns:
+
+```{python}
+diets = diet_data.loc[:, ['diet', 'weight_lost']]
 diets.head()
 ```
 
