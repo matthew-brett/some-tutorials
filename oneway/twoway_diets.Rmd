@@ -1,0 +1,730 @@
+---
+jupyter:
+  jupytext:
+    notebook_metadata_filter: all,-language_info
+    split_at_heading: true
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.8.2
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+# One-way ANOVA
+
+Imagine you have three groups, and you want to do a one-level ANOVA to test for
+overall differences across the groups.
+
+The general technique for a permutation test is:
+
+* You decide on your metric
+* You get your metric for the actual data - observed metric
+* You permute your data and take the same metric from the permuted data, and
+  repeat many times - fake metrics
+* You compare your observed metric to your fake metrics, to see how unusual it
+  is.
+
+For a two-sample permutation test, your metric is the difference in the two
+sample means.
+
+For a three sample version of the test — we need a metric that will be big
+where there are big differences between the three groups, and small when there
+are small differences.
+
+Let us reflect on what what we want from the metric.  It should be a single
+number to summarize all the values from the groups. It should be be large for
+big differences between the means for the various groups.  It should be larger
+when more observations are in the groups with large difference in means.
+
+Consider the following metric.  We will soon see this is the metric that the F-test uses.
+
+* Get the sample means for each of the three groups A, B, C, to give `mean_a`,
+  `mean_b`, `mean_c`
+* Get the mean across all the observations regardless of group
+  (`mean_overall`)
+* Subtract `mean_overall` from each of `mean_a`, `mean_b`, `mean_c` to give
+  `mean_a_diff`, `mean_b_diff`, `mean_c_diff`.
+* We are interested in positive as well as negative differences, so we do not
+  want to add these mean differences, otherwise the positive and negative means
+  differences will cancel out. So we next square the differences to give:
+  `sq_mean_a_diff`, `sq_mean_b_diff`, `sq_mean_c_diff`.
+* We want larger groups to have greater weight than small groups.  Call the
+  number in groups A, B, and C `n_a`, `n_b`, `n_c`. To weight the squared mean
+  differences we multiply each square mean difference by the number in each
+  group: `sq_mean_a_diff * n_a`, `sq_mean_b_diff * n_b`, `sq_mean_c_diff *
+  n_c`, to give `nsq_mean_a_diff`, `nsq_mean_b_diff`, `nsq_mean_c_diff`.
+*   Finally, we add up the group `nsq` scores to give our metric:
+
+    ```
+    our_metric = nsq_mean_a_diff + nsq_mean_b_diff + nsq_mean_c_diff
+    ```
+
+We will call this the SNSQGMD metric (Sum of N times SQuared Group Mean
+Difference).
+
+SNSQGMD will be large and positive when the individual groups have different
+means from each other and small when the means for the groups are pretty
+similar to each other, and therefore, to the overall mean.  It will be larger
+when larger groups have means with bigger deviations from the overall mean.
+
+To follow the recipe above, we calculate SNSQGMD for the actual groups A, B, C.
+Permute the group labels to give random groups A, B, C, and recalculate the
+metric.   See whether SNSQGMD in the real data is unusual in the distribution of
+the same metric for the permuted groups.
+
+This is the permutation equivalent of the one-way ANOVA.   The one-way ANOVA
+just uses some assumptions from the normal distribution to estimate the spread
+in the random distribution of SNSQGMD, instead of using permutation to calculate
+the random distribution.
+
+
+## An example
+
+```{python}
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+```
+
+Our dataset is a table giving the amount of weight lost for a group of people allocated to one of three possible diets, called `A`, `B` and `C`.
+
+See: [the dataset page](https://github.com/odsti/datasets/tree/master/sheffield_diet) for more detail.
+
+```{python}
+# Read the raw dataset
+diet_data = pd.read_csv('sheffield_diet.csv')
+diet_data.head()
+```
+
+```{python}
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
+
+mfit = smf.ols('weight_lost ~ gender * diet', data=diet_data).fit()
+
+sm.stats.anova_lm(mfit, typ=2)
+```
+
+Here we are only interested in the last two columns:
+
+```{python}
+# The group means by diet
+diet_data.groupby('diet')['weight_lost'].mean()
+```
+
+```{python}
+# Subtract group means for diet.
+# This column makes a new data frame that has one row as per
+# the original data frame, with new column that contains
+# the group means
+diet_means = diet_data.groupby('diet')['weight_lost'].transform('mean')
+diet_means
+```
+
+```{python}
+minus_gms = diet_data['weight_lost'] - diet_means
+minus_gms
+```
+
+```{python}
+# Exactly the same as subtracting group by group.
+is_A = diet_data['diet'] == 'A'
+only_A = diet_data[is_A]
+a_demeaned = only_A['weight_lost'] - np.mean(only_A['weight_lost'])
+a_demeaned.head()
+```
+
+```{python}
+# Put this into a function
+def subtract_means(df, group_col, value_col):
+    mean_col = df.groupby(group_col)[value_col].transform('mean')
+    return df[value_col] - mean_col
+```
+
+```{python}
+subtract_means(diet_data, 'diet', 'weight_lost')
+```
+
+```{python}
+# Now we've subtracted the means by group, the group means
+# should all be very close to 0
+new_df = diet_data.copy()
+new_df['diet_demeaned'] = subtract_means(new_df, 'diet', 'weight_lost')
+new_df.head()
+```
+
+```{python}
+# Means by group now very very close to 0.
+new_df.groupby('diet')['diet_demeaned'].mean()
+```
+
+```{python}
+# This implies that the overall mean is going to be very very close to 0
+new_df['diet_demeaned'].mean()
+```
+
+```{python}
+# Effect of gender.
+gender_group = new_df.groupby('gender')['diet_demeaned']
+gender_means = gender_group.mean()
+gender_means
+```
+
+```{python}
+# Sum of squared effect of gender
+ss_mg = np.sum(gender_group.count() * gender_means ** 2)
+ss_mg
+```
+
+```{python}
+sm.stats.anova_lm(mfit, typ=2)
+```
+
+```{python}
+sm.stats.anova_lm(mfit, typ=1)
+```
+
+```{python}
+get_sn_sq_gmd(diet_data, 'gender', 'weight_lost')
+```
+
+```{python}
+mf = smf.ols('weight_lost ~ diet * gender', data=diet_data).fit()
+sm.stats.anova_lm(mf, typ=2)
+```
+
+```{python}
+get_sn_sq_gmd(diet_data, 'diet', 'weight_lost')
+```
+
+```{python}
+# Make this into a function
+def get_adj_sn_sq_gmd(df, group_col, remove_col, val_col):
+    df_adj = df.copy()
+    df_adj['adj'] = subtract_means(df_adj, remove_col, val_col)
+    return get_sn_sq_gmd(df_adj, group_col, 'adj')
+```
+
+```{python}
+get_adj_sn_sq_gmd(diet_data, 'gender', 'diet', 'weight_lost')
+```
+
+```{python}
+get_adj_sn_sq_gmd(diet_data, 'diet', 'gender', 'weight_lost')
+```
+
+```{python}
+ndf2 = diet_data.copy()
+ndf2['gender_demeaned'] = subtract_means(ndf2, 'gender', 'weight_lost')
+ndf2.groupby('gender')['gender_demeaned'].mean()
+```
+
+```{python}
+ndf2['gender_demeaned'].mean()
+```
+
+```{python}
+diet_group = ndf2.groupby('diet')['gender_demeaned']
+ss_mg_gender = np.sum(diet_group.count() * diet_group.mean() ** 2)
+ss_mg_gender
+```
+
+```{python}
+# Order matters.
+# Subtract gender, then diet means
+g_then_d = diet_data.copy()
+g_then_d['g_adj'] = subtract_means(g_then_d, 'gender', 'weight_lost')
+g_then_d['both_adj'] = subtract_means(g_then_d, 'diet', 'g_adj')
+g_then_d.head()
+```
+
+```{python}
+# Subtract diet, then gender means
+d_then_g = diet_data.copy()
+d_then_g['d_adj'] = subtract_means(d_then_g, 'diet', 'weight_lost')
+d_then_g['both_adj'] = subtract_means(d_then_g, 'gender', 'd_adj')
+d_then_g.head()
+```
+
+```{python}
+# We need to use optimize to deal with this.
+# First we need dummy columns.
+gender_dummies = pd.get_dummies(diet_data['gender'])
+gender_dummies
+```
+
+```{python}
+# Use optimize to get the best least-squares parameters
+def rmse(params, y, cols):
+    predicted = np.sum(np.array(params) * np.array(cols), axis=1)
+    error = y - predicted
+    return np.sqrt(np.mean(error ** 2))
+```
+
+```{python}
+just_ones = np.ones((len(diet_data), 1))
+```
+
+```{python}
+y = diet_data['weight_lost']
+rmse([1], y, just_ones)
+```
+
+```{python}
+overall_mean = np.mean(y)
+overall_mean
+```
+
+```{python}
+rmse(overall_mean, y, just_ones)
+```
+
+```{python}
+from scipy.optimize import minimize
+res = minimize(rmse, [0], args=(y, just_ones))
+res
+```
+
+```{python}
+rmse([1, 1], y, gender_dummies)
+```
+
+```{python}
+g_means = diet_data.groupby('gender')['weight_lost'].mean()
+g_means
+```
+
+```{python}
+rmse(g_means, diet_data['weight_lost'], gender_dummies)
+```
+
+```{python}
+from scipy.optimize import minimize
+res = minimize(rmse, [0, 0], args=(diet_data['weight_lost'], gender_dummies))
+res
+```
+
+```{python}
+all_dummies = pd.get_dummies(diet_data.loc[:, ['gender', 'diet']])
+all_dummies
+```
+
+```{python}
+starting = np.zeros(len(all_dummies.columns))
+res = minimize(rmse, starting, args=(y, all_dummies))
+res
+```
+
+## Cheating
+
+```{python}
+grouped = diet_data.groupby(['gender', 'diet'])
+groups = grouped.groups
+groups
+```
+
+```{python}
+equal_indices = []
+for group_ids in groups:
+    indices = groups[group_ids]
+    equal_indices += list(indices)[:10]
+diet_cheat = diet_data.loc[equal_indices]
+diet_cheat.head()
+```
+
+```{python}
+groups = []
+for element in group_ns.index:
+    group = grouped.get_group(element).iloc[:10]
+    groups.append(group)
+diet_cheat = pd.concat(groups)
+diet_cheat.head()
+```
+
+## Means by group
+
+Here are the data, plotted by group.
+
+```{python}
+diets.plot.scatter('diet', 'weight_lost');
+```
+
+These are the means for each of the three groups.
+
+```{python}
+group_means = diets.groupby('diet').mean()
+group_means
+```
+
+These are the number of observations per group:
+
+```{python}
+group_ns = diets.groupby('diet').count()
+group_ns
+```
+
+Here is the overall mean, ignoring the group membership:
+
+```{python}
+overall_mean = np.mean(diets['weight_lost'])
+overall_mean
+```
+
+The next plot shows the data, the group means, and the overall mean:
+
+```{python}
+diets.plot.scatter('diet', 'weight_lost',
+                         label='Data')
+plt.scatter(group_means.index, np.array(group_means), color='red',
+            label='Group means')
+# A dashed line at the overall mean.
+plt.plot(group_means.index,
+         [overall_mean, overall_mean, overall_mean],
+         ':', color='green',
+         label='Overall mean')
+# A dashed line between each group mean and the overall mean.
+for group in group_means.index:
+    xs = [group, group]
+    ys = [float(group_means.loc[group]), overall_mean]
+    plt.plot(xs, ys, ':', color='red')
+plt.legend();
+```
+
+Notice the red dashed lines between the group means and the
+overall mean.  To make these easier to see, here is the same
+plot, without the individual data points:
+
+```{python}
+plt.scatter(group_means.index, np.array(group_means), color='red',
+            label='Group means')
+# A dashed line at the overall mean.
+plt.plot(group_means.index,
+         [overall_mean, overall_mean, overall_mean],
+         ':', color='green',
+         label='Overall mean')
+# A dashed line between each group mean and the overall mean.
+for group in group_means.index:
+    xs = [group, group]
+    ys = [float(group_means.loc[group]), overall_mean]
+    plt.plot(xs, ys, ':', color='red')
+plt.legend();
+```
+
+We designed our SNSQGMD metric to be large when the sum of the squared lengths of
+these lines are large.  The N in  SNSQGMD reminds us we multiply each squared
+length by the number in the group, to give more weight to large groups.
+
+To calculate SNSQGMD we get the Group Mean Difference.
+
+```{python}
+gmd = group_means - overall_mean
+gmd
+```
+
+We square these differences:
+
+```{python}
+sq_gmd = gmd ** 2
+sq_gmd
+```
+
+We want to give more weight to groups with more members, so we multiply each
+squared difference by the number in the group:
+
+```{python}
+n_sq_gmd = sq_gmd * group_ns
+n_sq_gmd
+```
+
+Finally, we add up these weighted squares to get the final metric:
+
+```{python}
+observed_sn_sq_gmd = np.sum(n_sq_gmd)
+observed_sn_sq_gmd
+```
+
+To make the process a bit clearer, we put the calculation of our
+metric into its own function so we can re-use it on different data frames.
+
+```{python}
+def get_sn_sq_gmd(df, group_col, val_col):
+    overall_mean = np.mean(df[val_col])
+    grouped = df.groupby(group_col)[val_col]
+    sq_gmd = (grouped.mean() - overall_mean) ** 2
+    return np.sum(sq_gmd * grouped.count())
+```
+
+Check that we get the same answer from the function as we did with the
+step-by-step calculation:
+
+```{python}
+get_sn_sq_gmd(diets, 'diet', 'weight_lost')
+```
+
+Next we consider a single trial in our ideal, null, fake world.  We do this by
+making a copy of the data frame, and then permuting the diet labels, so
+the association between the diet and the change values is random.
+
+```{python}
+fake_data = diets.copy()
+# Permute the treatment labels
+fake_data['diet'] = np.random.permutation(fake_data['diet'])
+fake_data.head()
+```
+
+We calculate our metric on these new data, step by step.
+
+```{python}
+fake_grouped = fake_data.groupby('diet')['weight_lost']
+# Notice that the overall_mean cannot change because we did not
+# change these values.
+fake_sq_gmd = (fake_grouped.mean() - overall_mean) ** 2
+fake_sn_sq_gmd = np.sum(fake_sq_gmd * fake_grouped.count())
+fake_sn_sq_gmd
+```
+
+We can also use the function above to do that calculation, and get the same
+answer:
+
+```{python}
+get_sn_sq_gmd(fake_data, 'diet', 'weight_lost')
+```
+
+Now we are ready to do our simulation.  We do 10000 trials. In each trial, we
+make a new random association, and recalculate the sum of squares metric.
+
+```{python}
+n_iters = 10000
+fake_sn_sq_gmds = np.zeros(n_iters)
+for i in np.arange(n_iters):
+    # Make sample from null world.
+    fake_data['diet'] = np.random.permutation(fake_data['diet'])
+    # Calculate corresponding metric.
+    fake_sn_sq_gmds[i] = get_sn_sq_gmd(fake_data, 'diet', 'weight_lost')
+```
+
+Of course, because these are sums of squares, they must all be positive.
+
+```{python}
+plt.hist(fake_sn_sq_gmds, bins=100);
+```
+
+How does our observed sum of squares metric compare to the distribution of fake
+sum of square metrics?
+
+```{python}
+p = np.count_nonzero(fake_sn_sq_gmds >= float(observed_sn_sq_gmd)) / n_iters
+p
+```
+
+The p value tells us that this observed metric is very unlikely to have come
+about in a random world.
+
+
+## Comparing to standard one-way ANOVA F tests
+
+In this section, we do the standard F-test calculations to show that we get a
+similar p value to the permutation version above.  This is the Statsmodels
+implementation of the one-way F test:
+
+```{python}
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
+
+mod = smf.ols('weight_lost ~ diet', data=diets).fit()
+
+sm.stats.anova_lm(mod, typ=1)
+```
+
+Here is the same calculation in Scipy:
+
+```{python}
+from scipy.stats import f_oneway
+```
+
+```{python}
+# Get the values from the individual groups.
+treatment = diets['diet']
+change = diets['weight_lost']
+diet_a_values = np.array(change[treatment == 'A'])
+diet_b_values = np.array(change[treatment == 'B'])
+diet_c_values = np.array(change[treatment == 'C'])
+```
+
+Do the F-test:
+
+```{python}
+f_result = f_oneway(diet_a_values, diet_b_values, diet_c_values)
+f_result
+```
+
+
+## The F statistic and the SNSQGMD metric
+
+In this section, we go into more detail about the calculation of the F value
+that you see above.  Here is the F statistic we got from Scipy (and
+Statsmodels):
+
+```{python}
+F_stat = f_result.statistic
+F_stat
+```
+
+This section goes through the calculation of the F statistic from the SNSQGMD
+metric.  This is the SNSQGMD value we calculated:
+
+```{python}
+observed_sn_sq_gmd
+```
+
+You can get the F statistic above by dividing the SNSQGMD metric by a scaled
+estimate of the variation still present in the data.
+
+The variation still present in the data are the remaining distances between the
+data (in the plot above) and their corresponding group means.  Call these
+remaining distances the "residuals".
+
+
+Subtract each group mean from their respective group values:
+
+```{python}
+# Calculate the residuals from the group means.
+diet_a_resid = diet_a_values - np.mean(diet_a_values)
+diet_b_resid = diet_b_values - np.mean(diet_b_values)
+diet_c_resid = diet_c_values - np.mean(diet_c_values)
+```
+
+Finally, we sum up the squares of these residuals:
+
+```{python}
+# We concatenate the three sets of residuals into one long array.
+all_group_resid = np.concatenate(
+    [diet_a_resid, diet_b_resid, diet_c_resid])
+# Sum of squared residuals from group means.
+ssq_resid_groups = np.sum(all_group_resid ** 2)
+ssq_resid_groups
+```
+
+The F-statistic results from dividing this measure of remaining variation into
+the SNSQGMD metric, with some scaling.  The scaling comes from the number of
+observations, and the number of groups.
+
+```{python}
+n_obs = len(diets)
+n_groups = len(group_means)
+```
+
+Here is the full calculation of the F-statistic. Notice that it is exactly the
+same as we got from Scipy and Statsmodels.
+
+```{python}
+# Calculate of the F value by scaling and dividing by residual variation
+# metric.
+df_groups = n_groups - 1  # Degrees of freedom for groups.
+df_error = n_obs - n_groups  # Degrees of freedom for residuals.
+# The F statistic
+(observed_sn_sq_gmd / df_groups) / (ssq_resid_groups / df_error)
+```
+
+Scaling and dividing by the residual variation gives a value that we can reason
+about with some standard mathematics, as long as we are prepared to assume that
+the values come from a normal distribution.  Specifically, with those
+assumptions, we can get a p value by comparing the observed F value to a
+standard F distribution with the same "degrees of freedom".  These are the
+`df_groups` and `df_error` values above.
+
+```{python}
+# Get standard F distribution object from Scipy.
+from scipy.stats import f as f_dist
+
+# Look up p value for a particular F statistic and degrees of freedom.
+# Notice the p value is the same as the p value from Scipy f_oneway
+# and from Statsmodels.
+f_dist(df_groups, df_error).sf(F_stat)
+```
+
+As you have seen, the permutation estimate gives a very similar answer.  We
+would argue that it is also a lot easier to explain.
+
+## F tests in terms of explained variation
+
+You will often see explanations of the F-value in terms of the amount of
+variation explained by the overall mean, compared to the amount of variation
+explained with the individual group means.  In fact, this "variance" way of
+thinking is what gave the test the name ANOVA (Analysis of Variance).
+
+The explained variation path (literally) adds up to the same thing as the
+SNSQGMD metric version of the F statistic above.  The current section goes
+through the explained variation way of thinking of the F statistic, and shows
+that it gives the same value for the SNSQGMD metric.
+
+The "variance" way of thinking about the F looks at the sum of squared
+"residual" variation in two situations.  First we get the residual variation
+when we subtract the group means.  We already have this from the F test
+calculation above.  Here we repeat the calculation as a reminder of what the
+value means:
+
+```{python}
+ssq_resid_groups = np.sum(all_group_resid ** 2)
+ssq_resid_groups
+```
+
+This is the sum of squared remaining variation when using the group means.
+
+We compare this to the squared remaining variation when just using the overall
+mean.  Here is that calculation.
+
+```{python}
+# Sum of squared residuals using overall mean
+# Subtract the overall mean from the original values to get residuals.
+resid_overall = diets['weight_lost'] - overall_mean
+# Square and sum the residuals to get the squared variation from overall mean.
+ssq_resid_overall = np.sum(resid_overall ** 2)
+ssq_resid_overall
+```
+
+The variance way of thinking says that we should be particularly interested in
+our group means, when using them does a very good job of reducing the
+variation.  This will happen when the group values are a lot closer to their
+individual group means, than they are to the overall mean.  In that case,
+`ssq_resid_groups` will be much lower than `ssq_resid_overall`, so we will get
+a fairly high value for `ssq_resid_overall - ssq_resid_groups`.  The result of
+this subtraction is called the *extra sum of squares* explained by the sample
+means:
+
+```{python}
+ess = ssq_resid_overall - ssq_resid_groups
+ess
+```
+
+Remember, `ssq_resid_overall` is the (sum of squared) variation remaining after
+accounting for the overall mean, and `ssq_resid_groups` is the (sum of squared)
+variation remaining after accounting for the sample means, so `ess` is the
+*extra* variation accounted for by using the sample means.
+
+But — wait — the `ess` value is *exactly* the same as the SNSQGMD metric we
+were already using!
+
+```{python}
+observed_sn_sq_gmd
+```
+
+This striking fact is true for any possible values and groups, and arises from
+the algebra of adding squared deviations from means.  The equivalence gives us
+two different ways of thinking of the same SNSQGMD metric value.  The SNSQGMD
+value is both:
+
+* A measure of how far the sample means are from the overall mean, AND
+* A measure of how much variation the sample means explain, over and above the
+  overall mean.
+
+In this second "explained variance" interpretation, we think of the F test
+calculation as being a scaled ratio of the extra variance explained by the
+sample means to the variance still remaining when we use the sample means.  If
+the sample means explain a lot of variation, then the top half of the F
+statistic will be large, and the bottom half will be small, giving a large F
+value.
