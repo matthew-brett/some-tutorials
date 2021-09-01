@@ -310,7 +310,7 @@ import statsmodels.formula.api as smf
 
 mod = smf.ols('weight_lost ~ diet', data=diets).fit()
 
-sm.stats.anova_lm(mod, typ=1)
+sm.stats.anova_lm(mod)
 ```
 
 Notice that the SNSQGMD metric value appears in the `diet` row, `sum_sq` column.
