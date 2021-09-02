@@ -7,7 +7,7 @@ jupyter:
       extension: .Rmd
       format_name: rmarkdown
       format_version: '1.2'
-      jupytext_version: 1.8.2
+      jupytext_version: 1.10.0
   kernelspec:
     display_name: Python 3
     language: python
@@ -189,6 +189,14 @@ sm.stats.anova_lm(mfit, typ=1)
 ```
 
 ```{python}
+def get_sn_sq_gmd(df, group_col, val_col):
+    overall_mean = np.mean(df[val_col])
+    grouped = df.groupby(group_col)[val_col]
+    sq_gmd = (grouped.mean() - overall_mean) ** 2
+    return np.sum(sq_gmd * grouped.count())
+```
+
+```{python}
 get_sn_sq_gmd(diet_data, 'gender', 'weight_lost')
 ```
 
@@ -303,7 +311,6 @@ rmse(g_means, diet_data['weight_lost'], gender_dummies)
 ```
 
 ```{python}
-from scipy.optimize import minimize
 res = minimize(rmse, [0, 0], args=(diet_data['weight_lost'], gender_dummies))
 res
 ```
@@ -322,27 +329,86 @@ res
 ## Cheating
 
 ```{python}
+# Make new data frame with equal group numbers, by dropping some
+# rows from the larger groups.
+equal_groups = []
 grouped = diet_data.groupby(['gender', 'diet'])
-groups = grouped.groups
-groups
-```
-
-```{python}
-equal_indices = []
-for group_ids in groups:
-    indices = groups[group_ids]
-    equal_indices += list(indices)[:10]
-diet_cheat = diet_data.loc[equal_indices]
+min_group_size = grouped['weight_lost'].count().min()
+for group_id, group in grouped:
+    equal_groups.append(group.iloc[:min_group_size])
+diet_cheat = pd.concat(equal_groups)
 diet_cheat.head()
 ```
 
 ```{python}
-groups = []
-for element in group_ns.index:
-    group = grouped.get_group(element).iloc[:10]
-    groups.append(group)
-diet_cheat = pd.concat(groups)
+diet_cheat.groupby(['gender', 'diet'])['weight_lost'].count()
+```
+
+```{python}
+cheat_fit = smf.ols('weight_lost ~ gender * diet',
+                    data=diet_cheat).fit()
+
+sm.stats.anova_lm(cheat_fit, typ=1)
+```
+
+```{python}
+gender_ss = get_sn_sq_gmd(diet_cheat, 'gender', 'weight_lost')
+gender_ss
+```
+
+```{python}
+diet_ss = get_sn_sq_gmd(diet_cheat, 'diet', 'weight_lost')
+diet_ss
+```
+
+```{python}
+diet_cheat['both'] = diet_cheat['gender'].str.cat(
+    diet_cheat['diet'], sep='-')
 diet_cheat.head()
+```
+
+```{python}
+diet_cheat['adj'] = subtract_means(diet_cheat, 'gender', 'weight_lost')
+diet_cheat['adj'] = subtract_means(diet_cheat, 'diet', 'adj')
+inter_ss = get_sn_sq_gmd(diet_cheat, 'both', 'adj')
+inter_ss
+```
+
+```{python}
+minus_everything = subtract_means(diet_cheat, 'both', 'adj')
+residual_ss = np.sum(minus_everything ** 2)
+residual_ss
+```
+
+```{python}
+diet_cheat['both'].unique()
+```
+
+```{python}
+n_groups = len(diet_cheat['both'].unique())
+```
+
+```{python}
+df_error = len(diet_cheat) - n_groups
+df_error
+```
+
+```{python}
+gender_df = len(diet_cheat['diet'].unique()) - 1
+gender_f = (gender_ss / gender_df) / (residual_ss / df_error)
+gender_f
+```
+
+```{python}
+diet_df = len(diet_cheat['diet'].unique()) - 1
+diet_f = (diet_ss / diet_df) / (residual_ss / df_error)
+diet_f
+```
+
+```{python}
+both_df = len(diet_cheat['both'].unique()) - gender_df - diet_df
+both_f = (inter_ss / both_df) / (residual_ss / df_error)
+both_f
 ```
 
 ## Means by group
