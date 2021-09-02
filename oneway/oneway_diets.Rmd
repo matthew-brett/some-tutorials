@@ -144,25 +144,25 @@ The next collection of cells shows the data, the group means, and the overall me
 
 ```{python}
 # Function to show the group and overall mean
-def plot_mean_diffs(df, group_col, val_col):
-    # Get the overall mean
-    mean_all = np.mean(df[val_col])
-    # Get the means by group.
-    means_grp = df.groupby(group_col)[val_col].mean()
+def plot_mean_diffs(df, group_col, val_col, color='red'):
     # Group names
     grp_names = df[group_col].unique()
     n_groups = len(grp_names)
-    # Plot red dots at group means.
-    plt.scatter(grp_names, means_grp, color='red', label='Group means')
+    # Overall mean
+    mean_all = np.mean(df[val_col])
     # Plot green dashed line at the overall mean.
     plt.plot(grp_names, np.repeat(mean_all, n_groups),
              ':', color='green', label='Overall mean')
-    # A red dashed line between each group mean and the overall mean.
+    # Get the means by group.
+    means_grp = df.groupby(group_col)[val_col].mean()
+    # Plot colored dots at group means.
+    plt.scatter(grp_names, means_grp, color=color, label='Group means')
+    # Colored dashed line between each group mean and the overall mean.
     for grp_name in grp_names:
         xs = [grp_name, grp_name]
         ys = [mean_all, float(means_grp.loc[grp_name])]
-        plt.plot(xs, ys, ':', color='red')
-    plt.legend();
+        plt.plot(xs, ys, ':', color=color)
+    plt.legend()
 ```
 
 ```{python}
