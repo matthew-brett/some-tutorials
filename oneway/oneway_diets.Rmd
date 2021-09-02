@@ -133,13 +133,6 @@ group_means = diets.groupby('diet').mean()
 group_means
 ```
 
-These are the number of observations per group:
-
-```{python}
-group_ns = diets.groupby('diet').count()
-group_ns
-```
-
 Here is the overall mean, ignoring the group membership:
 
 ```{python}
@@ -147,24 +140,36 @@ overall_mean = np.mean(diets['weight_lost'])
 overall_mean
 ```
 
-The next plot shows the data, the group means, and the overall mean:
+The next collection of cells shows the data, the group means, and the overall mean:
 
 ```{python}
-diets.plot.scatter('diet', 'weight_lost',
-                         label='Data')
-plt.scatter(group_means.index, np.array(group_means), color='red',
-            label='Group means')
-# A dashed line at the overall mean.
-plt.plot(group_means.index,
-         [overall_mean, overall_mean, overall_mean],
-         ':', color='green',
-         label='Overall mean')
-# A dashed line between each group mean and the overall mean.
-for group in group_means.index:
-    xs = [group, group]
-    ys = [float(group_means.loc[group]), overall_mean]
-    plt.plot(xs, ys, ':', color='red')
-plt.legend();
+# Function to show the group and overall mean
+def plot_mean_diffs(df, group_col, val_col):
+    # Get the overall mean
+    mean_all = np.mean(df[val_col])
+    # Get the means by group.
+    means_grp = df.groupby(group_col)[val_col].mean()
+    # Group names
+    grp_names = df[group_col].unique()
+    n_groups = len(grp_names)
+    # Plot red dots at group means.
+    plt.scatter(grp_names, means_grp, color='red', label='Group means')
+    # Plot green dashed line at the overall mean.
+    plt.plot(grp_names, np.repeat(mean_all, n_groups),
+             ':', color='green', label='Overall mean')
+    # A red dashed line between each group mean and the overall mean.
+    for grp_name in grp_names:
+        xs = [grp_name, grp_name]
+        ys = [mean_all, float(means_grp.loc[grp_name])]
+        plt.plot(xs, ys, ':', color='red')
+    plt.legend();
+```
+
+```{python}
+# Show all the data values by diet.
+diets.plot.scatter('diet', 'weight_lost')
+# Show the group means and overall mean.
+plot_mean_diffs(diets, 'diet', 'weight_lost')
 ```
 
 Notice the red dashed lines between the group means and the
@@ -172,20 +177,47 @@ overall mean.  To make these easier to see, here is the same
 plot, without the individual data points:
 
 ```{python}
-plt.scatter(group_means.index, np.array(group_means), color='red',
-            label='Group means')
-# A dashed line at the overall mean.
-plt.plot(group_means.index,
-         [overall_mean, overall_mean, overall_mean],
-         ':', color='green',
-         label='Overall mean')
-# A dashed line between each group mean and the overall mean.
-for group in group_means.index:
-    xs = [group, group]
-    ys = [float(group_means.loc[group]), overall_mean]
-    plt.plot(xs, ys, ':', color='red')
-plt.legend();
+plot_mean_diffs(diets, 'diet', 'weight_lost')
 ```
+
+## Removing the overall mean
+
+
+The first step in analysis is to subtract the overall mean from the data.  We do this because we are interested in the *difference* of the diet (group) means from the overall mean.
+
+Put another way, we accept that diets, overall, will lead to some level of weight lost; our question is whether this level *differs* between the diets.
+
+By removing the overall mean, we remove the average effect of the three diets, allowing us to concentrate on the difference in effect.
+
+```{python}
+# "zm" stands for "zero mean"
+diets_zm = pd.DataFrame()
+diets_zm['diet'] = diets['diet'].copy()
+diets_zm['wlost_zm'] = diets['weight_lost'] - overall_mean
+diets_zm.head()
+```
+
+As usual, when we subtract the mean from a column, the mean of the result is zero.  Actually, because of very small calculation error, it is very close to zero.
+
+```{python}
+np.mean(diets_zm['wlost_zm'])
+```
+
+If we calculate the new group means for the ZM data, they are the same as the original group means, minus the overall mean:
+
+```{python}
+gmeans_zm = diets_zm.groupby('diet').mean()
+gmeans_zm
+```
+
+Here is the plot of the group means, now centered around zero:
+
+```{python}
+plot_mean_diffs(diets_zm, 'diet', 'wlost_zm')
+```
+
+## The SNSQGMD metric
+
 
 We designed our SNSQGMD metric to be large when the sum of the squared lengths of
 these lines are large.  The N in  SNSQGMD reminds us we multiply each squared
@@ -193,8 +225,10 @@ length by the number in the group, to give more weight to large groups.
 
 To calculate SNSQGMD we get the Group Mean Difference.
 
+Because we have already subtracted the overall mean, the group means of the ZM values are the group mean differences.
+
 ```{python}
-gmd = group_means - overall_mean
+gmd = gmeans_zm  # Remember, the overall mean here is already (near) 0
 gmd
 ```
 
@@ -209,6 +243,12 @@ We want to give more weight to groups with more members, so we multiply each
 squared difference by the number in the group:
 
 ```{python}
+# Numbers in each group
+group_ns = diets_zm.groupby('diet').count()
+group_ns
+```
+
+```{python}
 n_sq_gmd = sq_gmd * group_ns
 n_sq_gmd
 ```
@@ -220,14 +260,12 @@ observed_sn_sq_gmd = np.sum(n_sq_gmd)
 observed_sn_sq_gmd
 ```
 
-To make the process a bit clearer, we put the calculation of our
-metric into its own function so we can re-use it on different data frames.
+To make the process a bit clearer, here is the same calculation in its own function so we can re-use it on different data frames.
 
 ```{python}
 def get_sn_sq_gmd(df, group_col, val_col):
-    overall_mean = np.mean(df[val_col])
     grouped = df.groupby(group_col)[val_col]
-    sq_gmd = (grouped.mean() - overall_mean) ** 2
+    sq_gmd = grouped.mean() ** 2
     return np.sum(sq_gmd * grouped.count())
 ```
 
@@ -235,7 +273,7 @@ Check that we get the same answer from the function as we did with the
 step-by-step calculation:
 
 ```{python}
-get_sn_sq_gmd(diets, 'diet', 'weight_lost')
+get_sn_sq_gmd(diets_zm, 'diet', 'wlost_zm')
 ```
 
 Next we consider a single trial in our ideal, null, fake world.  We do this by
@@ -243,8 +281,8 @@ making a copy of the data frame, and then permuting the diet labels, so
 the association between the diet and the change values is random.
 
 ```{python}
-fake_data = diets.copy()
-# Permute the treatment labels
+fake_data = diets_zm.copy()
+# Permute the group labels
 fake_data['diet'] = np.random.permutation(fake_data['diet'])
 fake_data.head()
 ```
@@ -252,10 +290,10 @@ fake_data.head()
 We calculate our metric on these new data, step by step.
 
 ```{python}
-fake_grouped = fake_data.groupby('diet')['weight_lost']
-# Notice that the overall_mean cannot change because we did not
-# change these values.
-fake_sq_gmd = (fake_grouped.mean() - overall_mean) ** 2
+fake_grouped = fake_data.groupby('diet')['wlost_zm']
+# Notice that the overall mean of 0 cannot change because we did not
+# change the values that make up the mean.
+fake_sq_gmd = fake_grouped.mean() ** 2
 fake_sn_sq_gmd = np.sum(fake_sq_gmd * fake_grouped.count())
 fake_sn_sq_gmd
 ```
@@ -264,7 +302,7 @@ We can also use the function above to do that calculation, and get the same
 answer:
 
 ```{python}
-get_sn_sq_gmd(fake_data, 'diet', 'weight_lost')
+get_sn_sq_gmd(fake_data, 'diet', 'wlost_zm')
 ```
 
 Now we are ready to do our simulation.  We do 10000 trials. In each trial, we
@@ -277,7 +315,7 @@ for i in np.arange(n_iters):
     # Make sample from null world.
     fake_data['diet'] = np.random.permutation(fake_data['diet'])
     # Calculate corresponding metric.
-    fake_sn_sq_gmds[i] = get_sn_sq_gmd(fake_data, 'diet', 'weight_lost')
+    fake_sn_sq_gmds[i] = get_sn_sq_gmd(fake_data, 'diet', 'wlost_zm')
 ```
 
 Of course, because these are sums of squares, they must all be positive.
@@ -326,9 +364,14 @@ from scipy.stats import f_oneway
 # Get the values from the individual groups.
 treatment = diets['diet']
 change = diets['weight_lost']
-diet_a_values = np.array(change[treatment == 'A'])
-diet_b_values = np.array(change[treatment == 'B'])
-diet_c_values = np.array(change[treatment == 'C'])
+# Subtract the overall mean
+# (Actually, that doesn't change the calculation of the F test below,
+# but, just for completeness).
+change_zm = change - np.mean(change)
+# Get the values in the individual groups.
+diet_a_values = np.array(change_zm[treatment == 'A'])
+diet_b_values = np.array(change_zm[treatment == 'B'])
+diet_c_values = np.array(change_zm[treatment == 'C'])
 ```
 
 Do the F-test:
@@ -444,8 +487,8 @@ through the explained variation way of thinking of the F statistic, and shows
 that it gives the same value for the SNSQGMD metric.
 
 The "variance" way of thinking about the F looks at the sum of squared
-"residual" variation in two situations.  First we get the residual variation
-when we subtract the group means.  We already have this from the F test
+"residual" variation in two situations.  First we look at the residual variation
+after we subtract the group means.  We already have this from the F test
 calculation above.  Here we repeat the calculation as a reminder of what the
 value means:
 
@@ -456,15 +499,13 @@ ssq_resid_groups
 
 This is the sum of squared remaining variation when using the group means.
 
-We compare this to the squared remaining variation when just using the overall
-mean.  Here is that calculation.
+We compare this to the squared remaining variation when after subtracting the *overall mean*.  Here is that calculation.
 
 ```{python}
-# Sum of squared residuals using overall mean
-# Subtract the overall mean from the original values to get residuals.
-resid_overall = diets['weight_lost'] - overall_mean
+# Sum of squared residuals using overall mean.
+# Remember, we did this calculation above.
 # Square and sum the residuals to get the squared variation from overall mean.
-ssq_resid_overall = np.sum(resid_overall ** 2)
+ssq_resid_overall = np.sum(diets_zm['wlost_zm'] ** 2)
 ssq_resid_overall
 ```
 
