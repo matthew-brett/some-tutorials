@@ -29,11 +29,11 @@ different factors, and the means for each of the (here) six groups.
 
 The two-way balanced ANOVA notebook introduced a cheat to simplify the
 calculations, where we dropped some rows in order to make the number of rows in
-each subgroup the same.  A sub-group is a group with the same level in the two
-factors.  When there are two factors, one with 2 levels, the other with 3, then
-there are 2 * 3 = 6 sub-groups.  In our example, one sub-group would be those
-rows for which the `gender` Factor has level `Female` and the `diet` factor has
-level `A`.
+each subgroup the same.  A sub-group is a group of rows sharing the same values
+in the levels for the two factors.  When there are two factors, one with 2
+levels, the other with 3, then there are 2 * 3 = 6 sub-groups.  In our example,
+one sub-group would be those rows for which the `gender` Factor has level
+`Female` and the `diet` factor has level `A`.
 
 This notebook covers the more general and typical case, where there are not the same number in each sub-group.
 
@@ -136,13 +136,21 @@ def subtract_means(df, group_col, value_col):
     return df[value_col] - mean_col
 ```
 
-When we subtract the diet mean, as expected, the mean for each diet group is near-as-dammit zero:
+This time, when we adjust for `diet`, the means for `gender` change:
 
 ```{python}
 # Subtract diet mean.
 wl_adj_diet = subtract_means(diet_data_zm, 'diet', 'wlost_zm')
 # Insert this Series into new data frame.
 adj_for_diet = diet_data_zm.assign(wl_adj_diet=wl_adj_diet)
+# Mean for each gender group
+adj_for_diet.groupby('gender')['wl_adj_diet'].mean()
+```
+
+However, because we have just subtracted the diet mean, the mean for each diet
+group is near-as-dammit zero:
+
+```{python}
 # Mean for each diet group
 adj_for_diet.groupby('diet')['wl_adj_diet'].mean()
 ```
@@ -305,7 +313,7 @@ x_gender
 
 As you can see from Pandas' function name above, this is a *dummy coding* of the `gender` factor.  This type of dummy coding is also called *indicator* coding.  The first column — `Female` — has a 1 for rows corresponding to a `Female` label in the `gender` column, and a 0 otherwise.  A 1 value in this column *indicates* that this is a `Female` row.  Conversely the `Male` column has a 1 for rows with a `Male` label in the gender column, and a 0 otherwise.  The 1 *indicates* this is a `Male` row.
 
-We will use these two columns in our regression.  Again, we are trying to find two parameters, one for each column.  The first parameter is the best number to multiply onto the first columns, and the second parameter corresponds to the second column.  The predicted value for each row is the result of adding (the first parameter times the corresponding first column value) to the (second parameter times the corresponding second column value).
+We will use these two columns in our regression.  Again, we are trying to find two parameters, one for each column.  The first parameter is the best number to multiply onto the first column, and the second parameter corresponds to the second column.  The predicted value for each row is the result of adding (the first parameter times the corresponding first column value) to the (second parameter times the corresponding second column value).
 
 Say we decided arbitrarily to use these parameters:
 
@@ -379,15 +387,15 @@ prediction. This corresponds to two entirely separable predictions, and so
 We are going to run a few of these least-square fits, and, for this specific
 case of minimizing SSE, there is a mathematical short-cut to avoid using
 `minimize`.  The details of how this works are not important here, but it
-involves the calculus of mean squares that you will see sketched in [this
+involves the calculus of sums of squares that you will see sketched in [this
 page](https://matthew-brett.github.io/cfd2020/extra/mean_sq_deviations.html).
 
 Here is the shortcut:
 
 ```{python}
 # Mathematical short-cut to finding best SSE parameters
-# We get the same answer from minimize, but this method is quicker # and more
-# precise.
+# We get the same answer from minimize, but this method is quicker
+# and a little more precise.
 best_params = np.linalg.pinv(x_gender) @ y
 best_params
 ```
@@ -396,7 +404,18 @@ In fact we can also write the multiplication of the parameters by the columns in
 
 ```{python}
 predicted = np.sum(best_params * np.array(x_gender), axis=1)
+predicted[:5]
 ```
+
+This is exactly the same as:
+
+```{python}
+arr = np.array(x_gender)
+predicted = best_params[0] * arr[:, 0] + best_params[1] * arr[:, 1]
+predicted[:5]
+```
+
+Finally we calculate the errors, square and sum them.
 
 ```{python}
 errors = y - predicted
@@ -405,7 +424,7 @@ np.sum(errors ** 2)
 
 Notice this gives us the same answer as the `minimize` fit for the best parameters, and the subsequent SSE calculation.
 
-Here's all that packaged up into a function.
+Here are those short-cuts packaged up into a function.
 
 ```{python}
 def calc_sse_shortcut(y, cols):
@@ -448,7 +467,7 @@ So far we haven't done anything very interesting, because we could get the same
 answer from getting the means for each group.  The interesting thing happens
 when we stack the columns for the two factors together.  When we do this, and
 find the least squares parameters, we are now finding the means for the
-`gender` levels *adjusting for diet* at the same times as the means for the
+`gender` levels *adjusting for diet* at the same time as the means for the
 `diet` levels *adjusting for gender*.
 
 Here is the stacked set of columns, combining the dummy columns of `gender` and
@@ -482,7 +501,7 @@ both_adj.groupby('gender')['both_adj'].mean()
 ```
 
 ```{python}
-# Subtracting adjusted means gives very near 0 means for gender levels.
+# Subtracting adjusted means gives very near 0 means for diet levels.
 both_adj.groupby('diet')['both_adj'].mean()
 ```
 
@@ -530,7 +549,11 @@ diet_ess = gender_ss - gender_diet_ss
 diet_ess
 ```
 
-Next we consider the *interaction*.  This looks at the difference in means (explained variance) for the six sub-groups, after adjusting for the main `gender` and `diet` effects.
+This is the `diet`, `sum_sq` value in the ANOVA table.
+
+Next we consider the *interaction*.  This looks at the adjusted differences in
+means (equivalently, explained variance) for the six sub-groups, after
+adjusting for the main `gender` and `diet` effects.
 
 To do this, we assemble the six dummy columns indicating membership in each of
 the six sub-groups (`Female-A`, `Female-B`, etc).
@@ -541,7 +564,7 @@ sub_groups = diet_data['gender'].str.cat(diet_data['diet'], sep='-')
 sub_groups
 ```
 
-Dummy columns, one for each sub-group:
+Here are the dummy columns, one for each sub-group:
 
 ```{python}
 x_sub_groups = pd.get_dummies(sub_groups)
