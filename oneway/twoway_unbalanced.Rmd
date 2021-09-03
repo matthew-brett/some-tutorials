@@ -7,7 +7,7 @@ jupyter:
       extension: .Rmd
       format_name: rmarkdown
       format_version: '1.2'
-      jupytext_version: 1.10.0
+      jupytext_version: 1.8.2
   kernelspec:
     display_name: Python 3
     language: python
@@ -444,28 +444,45 @@ np.sum((y - predicted) ** 2)
 calc_sse_shortcut(y, x_diet)
 ```
 
-So far we haven't done anything very interesting, because we could get the same answer from getting the means for each group.  The interesting thing happens when we stack the columns for the two factors together.  When we do this, and find the least squares parameters, we are now finding the means for the `gender` levels *adjusting for diet* at the same times as the means for the `diet` levels *adjusting for gender*.
+So far we haven't done anything very interesting, because we could get the same
+answer from getting the means for each group.  The interesting thing happens
+when we stack the columns for the two factors together.  When we do this, and
+find the least squares parameters, we are now finding the means for the
+`gender` levels *adjusting for diet* at the same times as the means for the
+`diet` levels *adjusting for gender*.
+
+Here is the stacked set of columns, combining the dummy columns of `gender` and
+`diet`:
 
 ```{python}
 x_gender_diet = pd.concat([x_gender, x_diet], axis=1)
 x_gender_diet
 ```
 
+The least-square parameters for these columns give the *adjusted means* for the
+levels of `gender` and `diet`.  The procedure adjusts the `gender` means for
+`diet` and the `diet` means for `gender`.
+
 ```{python}
+# Adjusted means for gender and diet
 both_params = np.linalg.pinv(x_gender_diet) @ y
 both_params
 ```
 
-Now, if we adjust for both `gender` and `diet` by removing the predicted values, we really do have means of very near 0 across `gender` and `diet`:
+Now, if we remove the adjusted means for both `gender` and `diet` by
+subtracting the predicted values, we really do have means of very near 0 across
+`gender` and `diet`:
 
 ```{python}
 predicted = np.sum(both_params * np.array(x_gender_diet), axis=1)
 y_both_adj = y - predicted
 both_adj = diet_data.assign(both_adj=y_both_adj)
+# Subtracting adjusted means gives very near 0 means for gender levels.
 both_adj.groupby('gender')['both_adj'].mean()
 ```
 
 ```{python}
+# Subtracting adjusted means gives very near 0 means for gender levels.
 both_adj.groupby('diet')['both_adj'].mean()
 ```
 
@@ -474,61 +491,97 @@ both_adj.groupby('diet')['both_adj'].mean()
 
 We now have a way to calculate the remaining sum of squares for any combination of factors, or their interaction.
 
+With these remaining sums of squares, we can calculate the *Extra Sum of Squares* (ESS) for each factor and their interaction.  See the [oneway ANOVA page](./oneway_diet.ipynb) for the ESS explanation of the SNSQGMD metric.
+
 ```{python}
-ss_diet = calc_sse_shortcut(y, x_diet)
-ss_diet
+# Remaining sum of squares after adjusting for diet alone.
+diet_ss = calc_sse_shortcut(y, x_diet)
+diet_ss
 ```
 
 ```{python}
-ss_gender_diet = calc_sse_shortcut(y, x_gender_diet)
-ss_gender_diet
+# Remaining sum of squares after adjusting for gender and diet.
+gender_diet_ss = calc_sse_shortcut(y, x_gender_diet)
+gender_diet_ss
 ```
 
-Thus the Extra Sum of Squares when adding `gender` to the model is:
+Thus the Extra Sum of Squares (ESS) when adding `gender` to the model that only contains the means for `diet`, is:
 
 ```{python}
-ess_gender = ss_diet - ss_gender_diet
-ess_gender
+# ESS when adding `gender` to a model with `diet` only.
+gender_ess = diet_ss - gender_diet_ss
+gender_ess
 ```
 
+Notice that this is the value in the `gender` row, `sum_sq` cell of the type II ANOVA table:
+
 ```{python}
+# The same table you saw at the top of this page.
 # Type II (2) sum of squares calculation ANOVA table.
 sm.stats.anova_lm(unbal_fit, typ=2)
 ```
 
-```{python}
-ss_gender = calc_sse_shortcut(y, x_gender)
-ess_diet = ss_gender - ss_gender_diet
-ess_diet
-```
+We next get the ESS when adding `diet` to the model only containing means for `gender`:
 
 ```{python}
-all_groups = diet_data['gender'].str.cat(diet_data['diet'], sep='-')
-all_groups
+# ESS when adding `diet` to a model with `gender` only.
+gender_ss = calc_sse_shortcut(y, x_gender)
+diet_ess = gender_ss - gender_diet_ss
+diet_ess
 ```
 
-```{python}
-x_all_groups = pd.get_dummies(all_groups)
-x_all_groups
-```
+Next we consider the *interaction*.  This looks at the difference in means (explained variance) for the six sub-groups, after adjusting for the main `gender` and `diet` effects.
+
+To do this, we assemble the six dummy columns indicating membership in each of
+the six sub-groups (`Female-A`, `Female-B`, etc).
 
 ```{python}
-x_all = pd.concat([x_gender_diet, x_all_groups], axis=1)
-x_all
+# Series giving sub-group labels for each row.
+sub_groups = diet_data['gender'].str.cat(diet_data['diet'], sep='-')
+sub_groups
 ```
 
-```{python}
-ss_all = calc_sse_shortcut(y, x_all)
-ss_all
-```
+Dummy columns, one for each sub-group:
 
 ```{python}
-ess_inter = ss_gender_diet - ss_all
-ess_inter
+x_sub_groups = pd.get_dummies(sub_groups)
+x_sub_groups
 ```
 
+These dummy columns express the sub-group membership and will allow us to find adjusted means for each sub-group.
+
+We next stack the `gender`, `diet` and `sub_group` columns into one large stack of columns, allowing us to model the means for each level of `gender` and `diet`, and for each of the six `gender` by `diet` sub-groups.
+
 ```{python}
-n_groups = len(all_groups.unique())
+# Full design expressing the two main effects and the interaction.
+x_full = pd.concat([x_gender_diet, x_sub_groups], axis=1)
+x_full
+```
+
+The `x_full` columns express everything we can model with the various means at our disposal.  Once we have allowed for these, the remaining error and sum of squares is the stuff that we cannot explain.  Call this the residual sum of squares.
+
+```{python}
+resid_ss = calc_sse_shortcut(y, x_full)
+resid_ss
+```
+
+Notice this is the `Residual`, `sum_sq` value in the ANOVA table above.  Soon we will use this in calculating the F statistics.
+
+But, before that, we can now calculate the ESS for adding the interaction means to a model that only allows for the two main-effect means of `gender` and `diet`.
+
+```{python}
+# ESS when adding interactions to model with `diet` and `gender` only.
+inter_ess = gender_diet_ss - resid_ss
+inter_ess
+```
+
+This is the `gender:diet`, `sum_sq` value in the ANOVA table.
+
+
+Last we will recalculate the F statistics.  In type II sum of squares, we divide the ESS (SNSQGMD) values by the remaining, unexplained sum of squares.   We also scale for the degrees of freedom for the things we are modeling, and the remaining sum of squares.
+
+```{python}
+n_groups = len(sub_groups.unique())  # 6 sub-groups.
 df_error = len(diet_data) - n_groups  # D.F. for remaining variation
 df_error
 ```
@@ -537,30 +590,29 @@ We replicate all three F values in the ANOVA table above:
 
 ```{python}
 df_gender = len(diet_data['gender'].unique()) - 1  # 1
-F_gender = (ess_gender / df_gender) / (ss_all / df_error)
+F_gender = (gender_ess / df_gender) / (resid_ss / df_error)
 F_gender
 ```
 
 ```{python}
 df_diet = len(diet_data['diet'].unique()) - 1  # 2
-F_diet = (ess_diet / df_diet) / (ss_all / df_error)
+F_diet = (diet_ess / df_diet) / (resid_ss / df_error)
 F_diet
 ```
 
 ```{python}
-# We have already adjusted the interaction values for gender and diet.
+# We have already adjusted the interaction values for gender and diet,
+# so we subtract the degrees of freedom for those effects.
 df_inter = n_groups - df_gender - df_diet - 1  # 2
-F_inter = (ess_inter / df_inter) / (ss_all / df_error)
+F_inter = (inter_ess / df_inter) / (resid_ss / df_error)
 F_inter
 ```
+We can look up the p value in the corresponding F distribution.  For example:
+
 ```{python}
 # Get standard F distribution object from Scipy.
 from scipy.stats import f as f_dist
 
 # Look up interaction p value from corresponding F distribution.
 f_dist(df_inter, df_error).sf(F_inter)
-```
-
-```{python}
-# ss_all -> resid_ss ...
 ```

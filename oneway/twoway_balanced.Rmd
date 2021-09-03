@@ -385,7 +385,8 @@ F_diet
 ```
 
 ```{python}
-# We have already adjusted the interaction values for gender and diet.
+# We have already adjusted the interaction values for gender and diet,
+# so we subtract the degrees of freedom for those effects.
 df_inter = n_groups - df_gender - df_diet - 1  # 2
 F_inter = (inter_ss / df_inter) / (resid_ss / df_error)
 F_inter
