@@ -18,7 +18,7 @@ jupyter:
 
 This page follows on from the [one-way ANOVA notebook](./oneway_diets.ipynb).
 
-Please make sure you follow the one-way ANOVA notebook before you read this notebook, because we are going to re-use a not of notation and machinery from that notebook.
+Please make sure you follow the one-way ANOVA notebook before you read this notebook, because we are going to re-use a lot of notation and machinery from that notebook.
 
 In the one-way notebook, we considered the situation where we had three groups, and, for each group, we have a certain number of values.  In our particular case, we had measures of the amount of weight lost by groups of people following three different diets.
 
@@ -125,7 +125,7 @@ diet_cheat.groupby(['gender', 'diet']).count()
 
 ## Two-way ANOVA
 
-Next we dive straight in to the standard two-way ANOVA, using Statsmodels.
+Next we dive straight into the standard two-way ANOVA, using Statsmodels.
 
 ```{python}
 cheat_fit = smf.ols('weight_lost ~ gender * diet', data=diet_cheat).fit()
