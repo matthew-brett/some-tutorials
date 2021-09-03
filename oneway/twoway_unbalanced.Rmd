@@ -1,0 +1,556 @@
+---
+jupyter:
+  jupytext:
+    notebook_metadata_filter: all,-language_info
+    split_at_heading: true
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.8.2
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+# Unbalanced two-way ANOVA
+
+This page follows on from the [two-way balanced ANOVA
+notebook](./twoway_balanced.ipynb).
+
+Please make sure you follow the two-way balanced ANOVA notebook before you read
+this notebook, because we are going to re-use notation and machinery
+from that notebook.
+
+That notebook introduced the two-way Analysis of Variance (ANOVA).  It
+generalizes the one-way ANOVA by looking at the means for the levels of the
+different factors, and the means for each of the (here) six groups.
+
+The two-way balanced ANOVA notebook introduced a cheat to simplify the
+calculations, where we dropped some rows in order to make the number of rows in
+each subgroup the same.  A sub-group is a group with the same level in the two
+factors.  When there are two factors, one with 2 levels, the other with 3, then
+there are 2 * 3 = 6 sub-groups.  In our example, one sub-group would be those
+rows for which the `gender` Factor has level `Female` and the `diet` factor has
+level `A`.
+
+This notebook covers the more general and typical case, where there are not the same number in each sub-group.
+
+As we will see, this introduces some complications that can only be solved by using multiple regression, and here, it is simpler to take the Extra Sum of Squares view of the SNSQGMD metric.  See the [oneway ANOVA notebook](./oneway_diet.ipynb) for a longer explanation of the different ways of thinking of the SNSQGMD metric.
+
+
+## Back again to the example
+
+
+```{python}
+# Array, data frame and plotting libraries.
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Statsmodels ANOVA machinery.
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
+```
+
+We return again to our dataset giving amount of weight lost (in kilograms)
+after 10 weeks of one of three possible diets.
+
+As in the one-way ANOVA page, we use the `gender` column to define one factor,
+and the `diet` column to define another, so we can classify the rows
+(individuals) into `Female` or `Male` (`gender`) and into `A`, `B` and `C`
+(`diet`).
+
+See: [the dataset page](https://github.com/odsti/datasets/tree/master/sheffield_diet) for more detail.
+
+```{python}
+# Read the dataset
+diet_data = pd.read_csv('sheffield_diet.csv')
+diet_data.head()
+```
+
+Pandas `groupby` can classify each row using *both* the `gender` label (level) and the `diet` label (level).  Notice we have different number is the six possible sub-groups.
+
+```{python}
+grouped = diet_data.groupby(['gender', 'diet'])
+# Show the counts in each of the six groups.
+grouped['weight_lost'].count()
+```
+
+## Unbalanced two-way ANOVA
+
+Here is the standard two-way ANOVA, using Statsmodels.
+
+```{python}
+unbal_fit = smf.ols('weight_lost ~ gender * diet', data=diet_data).fit()
+# Type II (2) sum of squares calculation ANOVA table.
+sm.stats.anova_lm(unbal_fit, typ=2)
+```
+
+Please keep referring back to this table.  This page will work through the
+extra-sum-of-squares calculations to replicate the values in this table.
+
+
+## Removing the overall mean
+
+First we subtract the overall mean, and work on those subtracted values:
+
+```{python}
+# "zm" stands for "zero mean"
+diet_data_zm = pd.DataFrame()
+diet_data_zm = diet_data.loc[:, :'diet'].copy()
+weight_col = diet_data['weight_lost']
+diet_data_zm['wlost_zm'] = weight_col - np.mean(weight_col)
+diet_data_zm.head()
+```
+
+The overall mean of the ZM column is (near as dammit) zero.
+
+```{python}
+np.mean(diet_data_zm['wlost_zm'])
+```
+
+## In the unbalanced case, the group means depend on each other.
+
+You may remember from the balanced ANOVA case that we wanted to remove the
+effect of `diet` on the data, before looking at the SNSQGMD metric for
+`gender`.  We found that, in fact, this didn't make any difference because subtracting the means for `diet` left the means for `gender` unchanged.
+
+Now we are in the unbalanced case, that is not true.
+
+Here are the means for the two `gender` levels without subtracting the means for `diet`:
+
+```{python}
+diet_data_zm.groupby('gender')['wlost_zm'].mean()
+```
+
+In the balanced case, we subtracted the means for `diet`, and got the same means for `gender`.
+
+We will use the `subtract_means` function from the balanced ANOVA notebook.
+
+```{python}
+# Put this into a function
+def subtract_means(df, group_col, value_col):
+    mean_col = df.groupby(group_col)[value_col].transform('mean')
+    return df[value_col] - mean_col
+```
+
+When we subtract the diet mean, as expected, the mean for each diet group is near-as-dammit zero:
+
+```{python}
+# Subtract diet mean.
+wl_adj_diet = subtract_means(diet_data_zm, 'diet', 'wlost_zm')
+# Insert this Series into new data frame.
+adj_for_diet = diet_data_zm.assign(wl_adj_diet=wl_adj_diet)
+# Mean for each diet group
+adj_for_diet.groupby('diet')['wl_adj_diet'].mean()
+```
+
+For the balanced case, we subtracted the `diet` and `gender` means before looking at the interaction.  We could subtract `diet` and then `gender` and not worry about the order in which we did this, because we would get the same answer from subtracting `gender` and then `diet`.  That is not true any more.
+
+
+Above, we have adjusted for `diet`, but we have not yet adjusted for `gender` - so the means for gender are not near zero:
+
+```{python}
+adj_for_diet.groupby('gender')['wl_adj_diet'].mean()
+```
+
+Now we adjust for `gender`:
+
+```{python}
+diet_then_gender = subtract_means(adj_for_diet, 'gender', 'wl_adj_diet')
+diet_then_gender.head()
+```
+
+Sure enough, the means are now near zero for `gender`, but now the `diet` means aren't very close to zero any more:
+
+```{python}
+adj_for_d_then_g = adj_for_diet.assign(wl_adj_d_then_g=diet_then_gender)
+adj_for_d_then_g.groupby('gender')['wl_adj_d_then_g'].mean()
+```
+
+```{python}
+adj_for_d_then_g.groupby('diet')['wl_adj_d_then_g'].mean()
+```
+
+If we subtract means for `gender`, then `diet`, we get the opposite effect, where the means for `diet` are very near zero, but the means for `gender` are not:
+
+```{python}
+# Gender then diet.
+wl_adj_gender = subtract_means(diet_data_zm, 'gender', 'wlost_zm')
+adj_for_gender = diet_data_zm.assign(wl_adj_gender=wl_adj_gender)
+gender_then_diet = subtract_means(adj_for_gender, 'diet', 'wl_adj_gender')
+adj_for_g_then_d = adj_for_gender.assign(wl_adj_g_then_d=gender_then_diet)
+# Diet means very close to 0
+adj_for_g_then_d.groupby('diet')['wl_adj_g_then_d'].mean()
+```
+
+```{python}
+# Gender means now not very close to 0
+adj_for_g_then_d.groupby('gender')['wl_adj_g_then_d'].mean()
+```
+
+When we are looking at the interaction effects, we need the means for `gender` and `diet` to be very near zero, so we cannot do the sequential steps we did before.  We need to find some way of *simultaneously* adjusting for `gender` and `diet`.
+
+That is a job for *multiple regression*.  But, at the moment, we do not have our typical continuous numerical regressors for a multiple regression, we have columns with categories.  The next step is to get the right regressors for multiple regression to do this simultaneous adjustment.
+
+## Means and multiple regression
+
+In simple and multiple regression, we use one or more columns of *regressors* to *predict* another column of values.
+
+Here we are trying to predict the values in the `weight_lost` column of the data frame.  Call this column `y`:
+
+```{python}
+# Column we want to predict.  We could call this the 'dependent' variable.
+y = diet_data['weight_lost']
+```
+
+Call the number of rows in this column: `n`.  In our case, this is the number
+of individuals, and the number of rows in the individual data frame.
+
+```{python}
+n = len(y)
+```
+
+Then we have other columns that we use to do the prediction.  These are *regressors*.
+
+Now let us consider the following rather strange column of numbers:
+
+```{python}
+x0 = pd.Series(np.ones(n))
+x0
+```
+
+This is just a column of `n` ones.  In regression, we look for the best *parameters* to multiply the columns by, to give a good prediction for the data, `y`. We have one parameter per column.  In this case, we are going to make our prediction with some value, `b0`, yet to be determined.  For the moment, let's make `b0` be the completely arbitrary number 10:
+
+```{python}
+b0 = 10
+```
+
+We are later going to find a better value for `b0`.
+
+Our current prediction for `y` is formed by multiplying our regressor by the parameter:
+
+```{python}
+prediction = b0 * x0
+prediction
+```
+
+When we have a good prediction, we want the prediction to be as close as possible to the actual data `y`.   We assess that by subtracting the prediction from the actual values to give the *errors*:
+
+```{python}
+errors = y - prediction
+errors
+```
+We want to work out whether `b0` is a good parameter, so we want a score (metric) for `b0`.  We form the typical *least-squares* metric by squaring all the errors (to eliminate the sign) and adding them up.  Call this the *sum of squared error* or SSE.  We have a good `b0` when this number is small, and a bad one when this number is large.
+
+```{python}
+SSE = np.sum(errors ** 2)
+SSE
+```
+
+We could try lots of `b0` values, and choose the best, but we will let Scipy's `minimize` do that for us:
+
+```{python}
+# Function for Scipy minimize to use
+def calc_sse(param, y, col):
+    predicted = param * col
+    errors = y - predicted
+    return np.sum(errors ** 2)
+```
+
+```{python}
+# Check we get the same value as before
+calc_sse(b0, y, x0)
+```
+
+```{python}
+from scipy.optimize import minimize
+res = minimize(calc_sse, 0, args=(y, x0))
+res
+```
+
+You can see from the `x.fun` value that `minimize` has found a much better value for the parameter `b0`.  The value it found was:
+
+```{python}
+best_b0 = res.x
+best_b0
+```
+
+Here's the mean of the `y` values:
+
+```{python}
+np.mean(y)
+```
+
+That looks suspiciously similar - why?  Remember what we are doing in
+`minimize`.  We are looking for the best value `b0` to multiply onto the
+column, in order to predict `y`.  The column is all ones, so the prediction at
+each row will be `b0`.  So the question becomes, what is the best single value
+to subtract from `y` such that we minimize the resulting sum of squared
+difference?  As you'll see in [the meaning of the
+mean](https://matthew-brett.github.io/cfd2020/mean-slopes/mean_meaning.html),
+the mean is exactly that value, so unless `minimize` messed up, it must find
+the mean as the best value for `b0`.
+
+Now let us think about finding two parameters, `b0` and `b1`, for two columns, `x0` and `x1`.
+
+In fact we will use these columns to represent the group membership for the `gender` factor.
+
+```{python}
+x_gender = pd.get_dummies(diet_data['gender'])
+x_gender
+```
+
+As you can see from Pandas' function name above, this is a *dummy coding* of the `gender` factor.  This type of dummy coding is also called *indicator* coding.  The first column — `Female` — has a 1 for rows corresponding to a `Female` label in the `gender` column, and a 0 otherwise.  A 1 value in this column *indicates* that this is a `Female` row.  Conversely the `Male` column has a 1 for rows with a `Male` label in the gender column, and a 0 otherwise.  The 1 *indicates* this is a `Male` row.
+
+We will use these two columns in our regression.  Again, we are trying to find two parameters, one for each column.  The first parameter is the best number to multiply onto the first columns, and the second parameter corresponds to the second column.  The predicted value for each row is the result of adding (the first parameter times the corresponding first column value) to the (second parameter times the corresponding second column value).
+
+Say we decided arbitrarily to use these parameters:
+
+```{python}
+params = np.array([10, 5])
+```
+
+Then:
+
+```{python}
+x_gender_arr = np.array(x_gender)
+pred_from_col0 = params[0] * x_gender_arr[:, 0]
+pred_from_col1 = params[1] * x_gender_arr[:, 1]
+predicted =  pred_from_col0 + pred_from_col1
+```
+
+and:
+
+```{python}
+errors = y - predicted
+SSE = np.sum(errors ** 2)
+SSE
+```
+
+Make this into a function for `minimize`:
+
+```{python}
+def calc_sse_for_cols(params, y, cols):
+    cols_arr = np.array(cols)
+    prediction = np.zeros(len(y))
+    for i in np.arange(len(params)):
+        prediction += params[i] * cols_arr[:, i]
+    errors = y - prediction
+    return np.sum(errors ** 2)
+```
+
+```{python}
+calc_sse_for_cols(params, y, x_gender)
+```
+
+Find the best (least-squares) parameters for the two dummy columns:
+
+```{python}
+res_gender = minimize(calc_sse_for_cols, [0, 0], args=(y, x_gender))
+res_gender
+```
+
+How do these values compare to the means for each group?
+
+```{python}
+diet_data.groupby('gender')['weight_lost'].mean()
+```
+
+The same!  The least-squares parameters for the dummy columns are the respective means for the `Female` and `Male` values in `y`.  Why?
+
+
+Remember the prediction is the sum of the predictions from the first and second
+columns.  Once multiplied by the first parameter `params[0]`, the first column
+will have the `params[0]` value where it had 1, and 0 otherwise.  Therefore,
+the first column (`params[0]`) prediction is `params[0]` for the `Female` rows,
+and 0 otherwise.  Conversely the second column (`params[1]`) prediction is
+`params[1]` for the `Male` rows and 0 otherwise.  The `params[0]` should be the
+best value to minimize the sum of squared error for the `Female` values, and
+will have no effect in predicting the `Male` values.  `params[1]` should
+minimize the SSE for the `Male` values, and will have no effect on the `Female`
+prediction. This corresponds to two entirely separable predictions, and so
+`params[0]` must be the mean of the `Female` values (to minimize the SSE), and
+`params[1]` must be the mean of the `Male` values.
+
+
+We are going to run a few of these least-square fits, and, for this specific
+case of minimizing SSE, there is a mathematical short-cut to avoid using
+`minimize`.  The details of how this works are not important here, but it
+involves the calculus of mean squares that you will see sketched in [this
+page](https://matthew-brett.github.io/cfd2020/extra/mean_sq_deviations.html).
+
+Here is the shortcut:
+
+```{python}
+# Mathematical short-cut to finding best SSE parameters
+# We get the same answer from minimize, but this method is quicker # and more
+# precise.
+best_params = np.linalg.pinv(x_gender) @ y
+best_params
+```
+
+In fact we can also write the multiplication of the parameters by the columns in a more efficient way, using Numpy broadcasting, like this:
+
+```{python}
+predicted = np.sum(best_params * np.array(x_gender), axis=1)
+```
+
+```{python}
+errors = y - predicted
+np.sum(errors ** 2)
+```
+
+Notice this gives us the same answer as the `minimize` fit for the best parameters, and the subsequent SSE calculation.
+
+Here's all that packaged up into a function.
+
+```{python}
+def calc_sse_shortcut(y, cols):
+    params = np.linalg.pinv(cols) @ y
+    predicted = np.sum(params * np.array(cols), axis=1)
+    errors = y - predicted
+    return np.sum(errors ** 2)
+```
+
+```{python}
+calc_sse_shortcut(y, x_gender)
+```
+
+We can do the same procedure to replicate the means for each diet:
+
+```{python}
+x_diet = pd.get_dummies(diet_data['diet'])
+x_diet
+```
+
+```{python}
+diet_params = np.linalg.pinv(x_diet) @ y
+diet_params
+```
+
+```{python}
+diet_data.groupby('diet')['weight_lost'].mean()
+```
+
+```{python}
+predicted = np.sum(diet_params * np.array(x_diet), axis=1)
+np.sum((y - predicted) ** 2)
+```
+
+```{python}
+calc_sse_shortcut(y, x_diet)
+```
+
+So far we haven't done anything very interesting, because we could get the same answer from getting the means for each group.  The interesting thing happens when we stack the columns for the two factors together.  When we do this, and find the least squares parameters, we are now finding the means for the `gender` levels *adjusting for diet* at the same times as the means for the `diet` levels *adjusting for gender*.
+
+```{python}
+x_gender_diet = pd.concat([x_gender, x_diet], axis=1)
+x_gender_diet
+```
+
+```{python}
+both_params = np.linalg.pinv(x_gender_diet) @ y
+both_params
+```
+
+Now, if we adjust for both `gender` and `diet` by removing the predicted values, we really do have means of very near 0 across `gender` and `diet`:
+
+```{python}
+predicted = np.sum(both_params * np.array(x_gender_diet), axis=1)
+y_both_adj = y - predicted
+both_adj = diet_data.assign(both_adj=y_both_adj)
+both_adj.groupby('gender')['both_adj'].mean()
+```
+
+```{python}
+both_adj.groupby('diet')['both_adj'].mean()
+```
+
+## Extra sum of squares
+
+
+We now have a way to calculate the remaining sum of squares for any combination of factors, or their interaction.
+
+```{python}
+ss_diet = calc_sse_shortcut(y, x_diet)
+ss_diet
+```
+
+```{python}
+ss_gender_diet = calc_sse_shortcut(y, x_gender_diet)
+ss_gender_diet
+```
+
+Thus the Extra Sum of Squares when adding `gender` to the model is:
+
+```{python}
+ess_gender = ss_diet - ss_gender_diet
+ess_gender
+```
+
+```{python}
+# Type II (2) sum of squares calculation ANOVA table.
+sm.stats.anova_lm(unbal_fit, typ=2)
+```
+
+```{python}
+ss_gender = calc_sse_shortcut(y, x_gender)
+ess_gender = ss_gender - ss_gender_diet
+ess_gender
+```
+
+```{python}
+all_groups = diet_data['gender'].str.cat(diet_data['diet'], sep='-')
+all_groups
+```
+
+```{python}
+x_all_groups = pd.get_dummies(all_groups)
+x_all_groups
+```
+
+```{python}
+x_all = pd.concat([x_gender_diet, x_all_groups], axis=1)
+x_all
+```
+
+```{python}
+ss_all = calc_sse_shortcut(y, x_all)
+ss_all
+```
+
+```{python}
+ess_inter = ss_gender_diet - ss_all
+ess_inter
+```
+
+```{python}
+n_groups = len(all_groups.unique())
+df_error = len(diet_data) - n_groups  # D.F. for remaining variation
+```
+
+We replicate all three F values in the ANOVA table above:
+
+```{python}
+df_gender = len(diet_data['gender'].unique()) - 1  # 1
+F_gender = (ess_gender / df_gender) / (ss_all / df_error)
+F_gender
+```
+
+```{python}
+```{python}
+df_diet = len(adj_for_gd['diet'].unique()) - 1  # 2
+F_diet = (diet_ss / df_diet) / (resid_ss / df_error)
+F_diet
+```
+
+```{python}
+# We have already adjusted the interaction values for gender and diet.
+df_inter = n_groups - df_gender - df_diet - 1  # 2
+F_inter = (inter_ss / df_inter) / (resid_ss / df_error)
+F_inter
+```
+```
