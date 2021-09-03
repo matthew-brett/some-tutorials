@@ -7,7 +7,7 @@ jupyter:
       extension: .Rmd
       format_name: rmarkdown
       format_version: '1.2'
-      jupytext_version: 1.8.2
+      jupytext_version: 1.10.0
   kernelspec:
     display_name: Python 3
     language: python
@@ -498,8 +498,8 @@ sm.stats.anova_lm(unbal_fit, typ=2)
 
 ```{python}
 ss_gender = calc_sse_shortcut(y, x_gender)
-ess_gender = ss_gender - ss_gender_diet
-ess_gender
+ess_diet = ss_gender - ss_gender_diet
+ess_diet
 ```
 
 ```{python}
@@ -530,6 +530,7 @@ ess_inter
 ```{python}
 n_groups = len(all_groups.unique())
 df_error = len(diet_data) - n_groups  # D.F. for remaining variation
+df_error
 ```
 
 We replicate all three F values in the ANOVA table above:
@@ -541,16 +542,25 @@ F_gender
 ```
 
 ```{python}
-```{python}
-df_diet = len(adj_for_gd['diet'].unique()) - 1  # 2
-F_diet = (diet_ss / df_diet) / (resid_ss / df_error)
+df_diet = len(diet_data['diet'].unique()) - 1  # 2
+F_diet = (ess_diet / df_diet) / (ss_all / df_error)
 F_diet
 ```
 
 ```{python}
 # We have already adjusted the interaction values for gender and diet.
 df_inter = n_groups - df_gender - df_diet - 1  # 2
-F_inter = (inter_ss / df_inter) / (resid_ss / df_error)
+F_inter = (ess_inter / df_inter) / (ss_all / df_error)
 F_inter
 ```
+```{python}
+# Get standard F distribution object from Scipy.
+from scipy.stats import f as f_dist
+
+# Look up interaction p value from corresponding F distribution.
+f_dist(df_inter, df_error).sf(F_inter)
+```
+
+```{python}
+# ss_all -> resid_ss ...
 ```
