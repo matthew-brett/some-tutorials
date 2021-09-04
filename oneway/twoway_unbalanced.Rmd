@@ -639,3 +639,10 @@ from scipy.stats import f as f_dist
 # Look up interaction p value from corresponding F distribution.
 f_dist(df_inter, df_error).sf(F_inter)
 ```
+
+## Links, references
+
+* [Nice, but somewhat advanced notebook on ANOVA by Jonathan
+  Taylor](http://web.stanford.edu/class/stats191/notebooks/ANOVA.html)
+* [Notes on different sums of squares calculations (I, II,
+  III)](https://www.ics.uci.edu/~jutts/110/Lecture18.pdf).
