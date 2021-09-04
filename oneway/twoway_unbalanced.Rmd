@@ -640,9 +640,39 @@ from scipy.stats import f as f_dist
 f_dist(df_inter, df_error).sf(F_inter)
 ```
 
-## Links, references
+## Links
+
+These are in no particular order.
 
 * [Nice, but somewhat advanced notebook on ANOVA by Jonathan
   Taylor](http://web.stanford.edu/class/stats191/notebooks/ANOVA.html)
 * [Notes on different sums of squares calculations (I, II,
   III)](https://www.ics.uci.edu/~jutts/110/Lecture18.pdf).
+* [Notes on F-test hypothesis testing, using some matrix
+  notation](https://bic-berkeley.github.io/psych-214-fall-2016/hypothesis_tests.html)
+* [A thoughtful discussion and spreadsheet
+  implementation](https://www.ars.usda.gov/ARSUserFiles/60540520/Two-wayANOVAspreadsheet.pdf).
+* [Presentation with detailed discussion of balanced and unbalanced
+  ANOVA](http://users.stat.umn.edu/~helwig/notes/aov2-Notes.pdf); helpful, but
+  it needs a background in mathematics.
+
+## References
+
+Again, these are in no particular order.
+
+A discussion of matrices for unbalanced ANOVA (available via JSTOR):
+
+> Marks, E. (1974). Analysis of Variance Techniques for Unbalanced Data. Review
+> of Educational Research, 44(3), 351-364. doi:10.2307/1169980
+
+An earlier discussion of matrices and unbalanced ANOVA:
+
+> Overall, J., & Spiegel, D.K. (1969). Concerning least squares analysis of
+> experimental data. Psychological Bulletin, 72, 311-322.
+
+On the history of ANOVA with unbalanced designs, with many useful references
+(JSTOR):
+
+> Herr, D. (1986). On the History of ANOVA in Unbalanced, Factorial Designs:
+> The First 30 Years. The American Statistician, 40(4), 265-270.
+> doi:10.2307/2684597
