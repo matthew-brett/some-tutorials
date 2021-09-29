@@ -1,0 +1,175 @@
+---
+jupyter:
+  jupytext:
+    notebook_metadata_filter: all,-language_info
+    split_at_heading: true
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.8.2
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+# Unbalanced two-way ANOVA
+
+This page follows on from the [two-way unbalanced ANOVA
+notebook](./twoway_unbalanced.ipynb).
+
+Please make sure you follow the two-way unbalanced ANOVA notebook before you read this notebook, because we are going to re-use notation and machinery
+from that notebook.
+
+## Back again to the example
+
+
+```{python}
+# Array, data frame and plotting libraries.
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Statsmodels ANOVA machinery.
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
+```
+
+We return again to our dataset giving amount of weight lost (in kilograms)
+after 10 weeks of one of three possible diets.
+
+As in the one-way ANOVA page, we use the `gender` column to define one factor,
+and the `diet` column to define another, so we can classify the rows
+(individuals) into `Female` or `Male` (`gender`) and into `A`, `B` and `C`
+(`diet`).
+
+See: [the dataset page](https://github.com/odsti/datasets/tree/master/sheffield_diet) for more detail.
+
+```{python}
+# Read the dataset
+diet_data = pd.read_csv('sheffield_diet.csv')
+diet_data.head()
+```
+
+Pandas `groupby` can classify each row using *both* the `gender` label (level) and the `diet` label (level).  Notice we have different number is the six possible sub-groups.
+
+```{python}
+grouped = diet_data.groupby(['gender', 'diet'])
+# Show the counts in each of the six groups.
+grouped['weight_lost'].count()
+```
+
+## General linear model notation
+
+Let us say we want to do an F-test for the interaction term.
+
+We partition the design matrix into the main effect columns and the interaction columns, like this:
+
+```{python}
+# Main effects
+gender = diet_data['gender']
+diet = diet_data['diet']
+# Dummy columns for each effect.
+g_cols = pd.get_dummies(gender)
+d_cols = pd.get_dummies(diet)
+# The main effect design matrix.
+X1 = np.hstack((g_cols, d_cols))
+X1
+```
+
+Next we need the design matrix for the interaction terms:
+
+```{python}
+# Series giving sub-group labels for each row.
+sub_groups = gender.str.cat(diet, sep='-')
+# Corresponding design matrix modeling mean for each group.
+X2 = pd.get_dummies(sub_groups)
+X2
+```
+
+Full design:
+
+```{python}
+X = np.hstack((X1, X2))
+```
+
+The data we are fitting:
+
+```{python}
+y = diet_data['weight_lost']
+```
+
+Least square parameters for full design:
+
+```{python}
+pX = np.linalg.pinv(X)
+B = pX @ y
+B
+```
+
+Fitted y values:
+
+```{python}
+y_hat = X @ B
+y_hat
+```
+
+Errors:
+
+```{python}
+e = y - y_hat
+e
+```
+
+Sum of squared errors:
+
+```{python}
+np.sum(e ** 2)
+```
+
+Compare to residual sum of squares value in Statsmodel ANOVA table:
+
+```{python}
+# Fit
+sm_fit = smf.ols('weight_lost ~ gender * diet', data=diet_data).fit()
+# Type II (2) sum of squares calculation ANOVA table.
+sm.stats.anova_lm(sm_fit, typ=2)
+```
+
+We can write that all in one go:
+
+```{python}
+e_again = y - X @ pX @ y
+np.sum(e_again ** 2)
+```
+
+That is also the same calculation as:
+
+```{python}
+H = X @ pX
+y_hat_again = H @ y
+e_3 = (y - y_hat_again)
+np.sum(e_3 ** 2)
+```
+
+The $H$ matrix above is called the *hat* matrix, because it "puts the hat on"
+the y values, meaning, it calculates the best fit predictions for the y values.
+
+
+In fact, using our matrix algebra, we can write the overall calculation you see in the `e_again` cell above, like this:
+
+```{python}
+n = len(y)
+# Because:
+# y - X @ pX @ y  === y - H @ y === (I - H) @ y
+rfm = np.eye(n) - H
+e_4 = rfm @ y
+np.sum(e_4 ** 2)
+```
+
+`rfm` above is the *residual forming matrix*, so called because, as you see, it includes the whole matrix calculation to turn the `y` values into the errors (residuals) with one matrix multiplication.  Multiplying with this matrix extracts all the information that can be modeled by the design matrix `X`.
+
+```{python}
+
+```
