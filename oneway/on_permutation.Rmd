@@ -175,12 +175,16 @@ Notice that `H` and `rfm` *do not depend on `y`* - they depend only on `X`.
 
 Now we calculate the *extra sum of squares* adding the interaction part of the design to a design without the interaction part.
 
+We start by estimating the design without the interaction part - therefore, a design that just models the main effects.
+
 ```{python}
 # Hat matrix for main effects part of design.
-H1 = X1 @ np.linalg.pinv(X1)
+# X1 is the main-effects part of the design.
+H_for_X1 = X1 @ np.linalg.pinv(X1)
 # Residual forming matrix for X1
-rfm1 = np.eye(n) - H1
-# Errors and residual sum of squares
+rfm1 = np.eye(n) - H_for_X1
+# Errors and residual sum of squares for design that
+# only includes the main effects.
 e1 = rfm1 @ y
 RSS1 = np.sum(e1 ** 2)
 RSS1
@@ -190,8 +194,8 @@ RSS1
 # Residual sum of squares for full design (X1 with X2)
 # We calculated this above, but just for completeness,
 # calculate again.
-H = X @ np.linalg.pinv(X)
-rfm = np.eye(n) - H
+H_for_X = X @ np.linalg.pinv(X)
+rfm = np.eye(n) - H_for_X
 e = rfm @ y
 RSS = np.sum(e ** 2)
 RSS
@@ -212,12 +216,71 @@ sm.stats.anova_lm(sm_fit, typ=2)
 Theorem 2 of Computational Statistics and Data Analysis 54 (2010) 1881–1893 states that we can also calculate the ESS with:
 
 ```{python}
+# Applying formula 2 from paper above.
 # X2, after removing everything modeled in X1
 X_rr = rfm1 @ X2
 # Calculate hat matrix for X_rr
-H_rr = X_rr @ np.linalg.pinv(X_rr)
+pX_rr = np.linalg.pinv(X_rr)
+H1 = X_rr @ pX_rr
 # Adjusted SNSQGM metric.
-ESS1_via_y = y @ H_rr @ y
+y_hat1 = H1 @ y
+ESS1_via_y_hat = y @ y_hat1
 # We get exactly the same answer as before.
-ESS1_via_y
+ESS1_via_y_hat
 ```
+
+The calculation above, gives the same result as the following:
+
+```{python}
+np.sum(y_hat1 ** 2)
+```
+
+Put another way, the sum of squares of `y * y_hat1` equals the sum of squares of `y_hat1 * y_hat1`.  In fact, this is so for any `y` and `X` in our case of least-squares fitting.  Why?
+
+
+The sum of squares above is the same operation as the [vector dot product](http://matthew-brett.github.io/teaching/on_vectors.html) of the vector on itself - meaning that the *dot* product is just another way of writing that calculation.  Write `y_hat1` as $\hat{y}$ ($y$ with a hat on top). In mathematics we would write the dot product of $\hat{y}$ on itself as:
+
+$$
+\hat{y} . \hat{y}
+$$
+
+In code it looks like this:
+
+```{python}
+np.dot(y_hat1, y_hat1)
+```
+
+Above we discovered that $y . \hat{y} = \hat{y} . \hat{y}$.
+
+This is because we have decomposed $y$ into $\hat{y}$ and a vector of errors (residuals) $e$:
+
+$$
+y = X B + e
+$$
+
+$$
+\hat{y} = X B
+$$
+
+$$
+y = \hat{y} + e
+$$
+
+Because of the least squares fitting for $B$, $e$ is orthogonal to all the columns of $X$, and therefore, $\hat{y}$.
+
+```{python}
+e = y - y_hat1
+# This is the dot product - (very near) zero if vectors orthogonal
+np.dot(e, y_hat1)
+```
+
+Therefore, because $y = \hat{y} + e$, and $e . \hat{y} = 0$, by the [algebra of dot products](http://matthew-brett.github.io/teaching/on_vectors.html#distributive-over-vector-addition):
+
+$$
+y . \hat{y} = (\hat{y} + e) . \hat{y} = \
+\hat{y} . \hat{y} + e . \hat{y} = \hat{y} . \hat{y}
+$$
+
+
+
+The calculation $\hat{y} . \hat{y}$ above is a direct match to the SNSQGM calculation in the balanced case - the calculation has the effect of squaring the adjusted mean values and multiplying by their respective group counts.
