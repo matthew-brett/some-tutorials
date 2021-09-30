@@ -208,3 +208,16 @@ ESS
 # Notice that we have just calculated the ESS for gender:diet
 sm.stats.anova_lm(sm_fit, typ=2)
 ```
+
+Theorem 2 of Computational Statistics and Data Analysis 54 (2010) 1881–1893 states that we can also calculate the ESS with:
+
+```{python}
+# X2, after removing everything modeled in X1
+X_rr = rfm1 @ X2
+# Calculate hat matrix for X_rr
+H_rr = X_rr @ np.linalg.pinv(X_rr)
+# Adjusted SNSQGM metric.
+ESS1_via_y = y @ H_rr @ y
+# We get exactly the same answer as before.
+ESS1_via_y
+```
