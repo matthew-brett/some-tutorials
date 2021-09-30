@@ -170,6 +170,41 @@ np.sum(e_4 ** 2)
 
 `rfm` above is the *residual forming matrix*, so called because, as you see, it includes the whole matrix calculation to turn the `y` values into the errors (residuals) with one matrix multiplication.  Multiplying with this matrix extracts all the information that can be modeled by the design matrix `X`.
 
-```{python}
+Notice that `H` and `rfm` *do not depend on `y`* - they depend only on `X`.
 
+
+Now we calculate the *extra sum of squares* adding the interaction part of the design to a design without the interaction part.
+
+```{python}
+# Hat matrix for main effects part of design.
+H1 = X1 @ np.linalg.pinv(X1)
+# Residual forming matrix for X1
+rfm1 = np.eye(n) - H1
+# Errors and residual sum of squares
+e1 = rfm1 @ y
+RSS1 = np.sum(e1 ** 2)
+RSS1
+```
+
+```{python}
+# Residual sum of squares for full design (X1 with X2)
+# We calculated this above, but just for completeness,
+# calculate again.
+H = X @ np.linalg.pinv(X)
+rfm = np.eye(n) - H
+e = rfm @ y
+RSS = np.sum(e ** 2)
+RSS
+```
+
+```{python}
+# Extra sum of squares
+ESS = RSS1 - RSS
+ESS
+```
+
+```{python}
+# A reminder of the ANOVA table
+# Notice that we have just calculated the ESS for gender:diet
+sm.stats.anova_lm(sm_fit, typ=2)
 ```
