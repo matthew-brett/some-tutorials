@@ -1,13 +1,14 @@
 ---
 jupyter:
   jupytext:
+    formats: ipynb,Rmd
     notebook_metadata_filter: all,-language_info
     split_at_heading: true
     text_representation:
       extension: .Rmd
       format_name: rmarkdown
       format_version: '1.2'
-      jupytext_version: 1.8.2
+      jupytext_version: 1.10.1
   kernelspec:
     display_name: Python 3
     language: python
@@ -17,7 +18,10 @@ jupyter:
 # One-way ANOVA
 
 Imagine you have three groups, and you want to do a one-level ANOVA to test for
-overall differences across the groups.
+overall differences across the groups. For instance, if you wanted to test whether
+reaction time on a cognitive task was different between three experimental conditions. Or
+if time spent on a webpage was longer depending on which of three versions of the page
+a user browsed etc. etc.
 
 The general technique for a permutation test is:
 
@@ -44,19 +48,24 @@ Consider the following metric.  We will soon see this is the metric that the F-t
 
 * Get the sample means for each of the three groups A, B, C, to give `mean_a`,
   `mean_b`, `mean_c`
+   <br> 
 * Get the mean across all the observations regardless of group
   (`mean_overall`)
+   <br> 
 * Subtract `mean_overall` from each of `mean_a`, `mean_b`, `mean_c` to give
   `mean_a_diff`, `mean_b_diff`, `mean_c_diff`.
+   <br> 
 * We are interested in positive as well as negative differences, so we do not
   want to add these mean differences, otherwise the positive and negative means
   differences will cancel out. So we next square the differences to give:
   `sq_mean_a_diff`, `sq_mean_b_diff`, `sq_mean_c_diff`.
+   <br> 
 * We want larger groups to have greater weight than small groups.  Call the
   number in groups A, B, and C `n_a`, `n_b`, `n_c`. To weight the squared mean
   differences we multiply each square mean difference by the number in each
-  group: `sq_mean_a_diff * n_a`, `sq_mean_b_diff * n_b`, `sq_mean_c_diff *
-  n_c`, to give `nsq_mean_a_diff`, `nsq_mean_b_diff`, `nsq_mean_c_diff`.
+  group: `sq_mean_a_diff * n_a`, `sq_mean_b_diff * n_b`, `sq_mean_c_diff * n_c`, 
+  to give `nsq_mean_a_diff`, `nsq_mean_b_diff`, `nsq_mean_c_diff`.
+   <br> 
 *   Finally, we add up the group `nsq` scores to give our metric:
 
     ```
@@ -68,29 +77,45 @@ Difference).
 
 SNSQGMD will be large and positive when the individual groups have different
 means from each other and small when the means for the groups are pretty
-similar to each other, and therefore, to the overall mean.  It will be larger
-when larger groups have means with bigger deviations from the overall mean.
+similar to each other, and therefore, to the overall mean.  
 
-To follow the recipe above, we calculate SNSQGMD for the actual groups A, B, C.
-Permute the group labels to give random groups A, B, C, and recalculate the
-metric.   See whether SNSQGMD in the real data is unusual in the distribution of
-the same metric for the permuted groups.
+Because the squared mean difference for each group is weighted by the size of the group, 
+SNSQGMD  will be larger when larger groups have means with bigger deviations from the 
+overall mean.
+
+The three graphs below use some simulated data to show how SNSQGMD changes
+as a function of the difference between the means of three groups. Each 
+group consists of 10000 simulated observations. The group means are shown as coloured 
+diamonds, and the overall mean is shown as a red 'X'.  The difference between each group 
+mean and the overall mean is shown by a dashed red line. SNSQGMD - calculated via the recipe 
+above - is shown for each graph below the x axis.
+
+*Note: please see [this page](SNSQGMD_and_F-statistic_simulations) if you would like
+to see the code that generated the simulated data for these graphs*
+
+
+<img src="SNSQGMD_sim.JPG">
+
+
+From the graphs we can see that SNSQGMD is large when the difference between
+the group means is large (shown in the leftmost graph). SNSQGMD gets smaller
+when the difference in means is smaller (middle graph). And SNSQGMD will be 
+(relatively) very small when the distance between the group means is very small,
+and therefore the group means are all very similar to the overall mean (rightmost graph).
+
+To use SNSQGMD as the metric for a three-sample permutation test, we calculate SNSQGMD 
+for the actual groups A, B, C, by following the recipe above. We then permute the group labels 
+to give random groups A, B, C, and recalculate the metric. We then see whether SNSQGMD in 
+the real data is unusual in the distribution of the same metric for the permuted groups.
 
 This is the permutation equivalent of the one-way ANOVA.   The one-way ANOVA
 just uses some assumptions from the normal distribution to estimate the spread
 in the random distribution of SNSQGMD, instead of using permutation to calculate
 the random distribution.
 
-
 ## An example
 
 Dataset from <https://dasl.datadescription.com/datafile/contrast-baths>
-
-```{python}
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-```
 
 ## The example dataset, ready for analysis
 
@@ -112,6 +137,11 @@ Notice we have three treatment groups, the "Bath" group, the "Bath+Exercise"
 group and the "Exercise" group.
 
 ```{python}
+# import the modules we need
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
 # Read the raw dataset
 baths = pd.read_csv('contrast-baths.txt', sep='\t')
 baths.head()
@@ -127,7 +157,7 @@ baths.dtypes
 
 Investigating, the missing data here are given by a single space character.
 Fix that, by replacing single spaces with empty strings. Then we convert all
-the "Hand Vol Chg" values to numbers.
+the `Hand Vol Chg` values to numbers.
 
 ```{python}
 baths['Hand Vol Chg'] = baths['Hand Vol Chg'].replace(' ', '')
@@ -232,9 +262,17 @@ metric into its own function so we can re-use it on different data frames.
 
 ```{python}
 def get_sn_sq_gmd(df, group_col, val_col):
+    
+    # calculate the overall mean of our 'val_col', which contains our outcome variable
     overall_mean = np.mean(df[val_col])
+    
+    # group the outcome variable by the group variable in our 'group_col'
     grouped = df.groupby(group_col)[val_col]
+    
+    # calculated the squared group mean difference (the group means minus the overall mean, squared)
     sq_gmd = (grouped.mean() - overall_mean) ** 2
+    
+    # return the sum of the squared group mean difference, multiplied by the number of observations in each group
     return np.sum(sq_gmd * grouped.count())
 ```
 
@@ -246,8 +284,8 @@ get_sn_sq_gmd(clean_baths, 'Treatment', 'Hand Vol Chg')
 ```
 
 Next we consider a single trial in our ideal, null, fake world.  We do this by
-making a copy of the data frame, and then permuting the Treatment labels, so
-the association between the "Treatment" and the "Hand Vol Chg" values is
+making a copy of the data frame, and then permuting the `Treatment` labels, so
+the association between the `Treatment` and the `Hand Vol Chg` values is
 random.
 
 ```{python}
@@ -291,11 +329,22 @@ for i in np.arange(n_iters):
 Of course, because these are sums of squares, they must all be positive.
 
 ```{python}
-plt.hist(fake_sn_sq_gmds, bins=100);
+plt.hist(fake_sn_sq_gmds, bins=100, label = 'simulated SNSQGMD values')
+plt.xlabel('SNSQGMD')
+plt.ylabel('Frequency')
+plt.legend(); 
 ```
 
 How does our observed sum of squares metric compare to the distribution of fake
 sum of square metrics?
+
+```{python}
+plt.hist(fake_sn_sq_gmds, bins=100, label = 'simulated SNSQGMD values')
+plt.plot(get_sn_sq_gmd(clean_baths, 'Treatment', 'Hand Vol Chg'), 10, 'o', label = 'actual SNSQGMD value')
+plt.xlabel('SNSQGMD')
+plt.ylabel('Frequency')
+plt.legend();
+```
 
 ```{python}
 p = np.count_nonzero(fake_sn_sq_gmds >= float(observed_sn_sq_gmd)) / n_iters
@@ -303,8 +352,10 @@ p
 ```
 
 The p value tells us that this observed metric is very unlikely to have come
-about in a random world.
-
+about in a random world. That is, if the three groups were sampled from the same
+population - as in the random world we simulated - it is very, very unlikely we would 
+we observe an SNSQGMD value as large as we did observe. So, we can be confident that the 
+three groups were sampled from populations with different means.
 
 ## Comparing to standard one-way ANOVA F tests
 
@@ -519,3 +570,19 @@ sample means to the variance still remaining when we use the sample means.  If
 the sample means explain a lot of variation, then the top half of the F
 statistic will be large, and the bottom half will be small, giving a large F
 value.
+
+Perhaps the most important thing to note about the F statistic is that it 'moves' similarly to our SNSQGMD metric.
+I.e. it will be large when the distance between the group means the overall mean is high, and small when
+the distance between the group means and the overall means is small. 
+
+To illustrate this point, the three graphs below use the same simulated data we saw earlier. The graphs show how the F statistic changes as a function of the difference between the means of three groups consisting of 10000 simulated observations. As before, the group means are shown as coloured diamonds, and the overall mean is shown as a red 'X'. The difference between each group mean and the overall mean is shown by a dashed red line. The F statistic is shown for each graph below the x axis.
+
+*Note: please see [this page](SNSQGMD_and_F-statistic_simulations) if you would like
+to see the code that generated the simulated data for these graphs*
+
+
+<img src="F_stat_sim.JPG">
+
+```{python}
+
+```
